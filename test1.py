@@ -23,8 +23,8 @@ else:
     print("Warning: Running on CPU will be EXTREMELY slow.")
     pipe = pipe.to("cpu")
 
-# 4. Generer bildet
 prompt = ("A sailboat on the ocean")
+# 4. Generer bildet
 
 # num_inference_steps bestemmer hvor mange ganger U-Net skal rense støy (typisk 30-50)
 image = pipe(
