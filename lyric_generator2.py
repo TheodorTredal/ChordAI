@@ -1,8 +1,10 @@
 import torch
 from transformers import pipeline
 
+# # model_id="microsoft/Phi-3-mini-4k-instruct"
+model_id="allenai/OLMo-2-1124-7B-Instruct"
 class ChordAILyricGenerator:
-    def __init__(self, model_id="allenai/OLMo-2-1124-7B-Instruct"):
+    def __init__(self, model_id=model_id):
         print(f"Laster inn modell: {model_id}...")
         
         # 1. Automatisk enhets- og VRAM-håndtering
