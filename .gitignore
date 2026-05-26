@@ -1,0 +1,64 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Virtual environments
+env/
+venv/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+.venv.bak/
+
+# Environment variables
+.env
+.env.*
+
+# Packages and wheels
+*.egg-info/
+*.egg
+dist/
+build/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+sdist/
+.eggs/
+
+# Logs and coverage
+pip-log.txt
+pip-delete-this-directory.txt
+htmlcov/
+.tox/
+.nox/
+.coverage
+.cache
+nose2-*.xml
+.coverage.*
+
+# Test/output
+.pytest_cache/
+.hypothesis/
+unit_tests/
+
+# Jupyter notebook checkpoints
+.ipynb_checkpoints
+
+# Editors/IDEs
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# OS junk files
+.DS_Store
+Thumbs.db
+
+# If you copy in the entire project as a subfolder, ignore its git repo if present
+svco/.git
+Sequential-Voice-and-Chord-Orchestrator/.git
