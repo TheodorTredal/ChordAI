@@ -272,9 +272,12 @@ def compute_features(
     hop_length: int,
     bins_per_octave: int = 36,
     fmin_hz: float = 65.40639132514966,  # C2
-) -> Tuple[np.ndarray, np.ndarray]:
-    """Return (chroma, rms) where chroma is (12, frames) and rms is (frames,)."""
-
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Return (chroma, rms, bass_pc) where:
+       - chroma is (12, frames)
+       - rms is (frames,)
+       - bass_pc is (12, frames) approximate low-frequency pitch-class energy
+    """
     import librosa
 
     chroma = librosa.feature.chroma_cqt(
@@ -285,6 +288,31 @@ def compute_features(
         fmin=fmin_hz,
     ).astype(np.float32)
 
+    cqt = np.abs(
+        librosa.cqt(
+            y=y,
+            sr=sr,
+            hop_length=hop_length,
+            fmin=fmin_hz,
+            n_bins=6 * bins_per_octave,  # ~6 octaves
+            bins_per_octave=bins_per_octave,
+        )
+    ).astype(np.float32)  # shape: (bins, frames)
+
+    # Focus on lowest ~2 octaves to approximate bass/root
+    low_bins = min(cqt.shape[0], 2 * bins_per_octave)
+    cqt_low = cqt[:low_bins, :]
+
+    # Fold bins -> pitch class (12)
+    bass_pc = np.zeros((12, cqt_low.shape[1]), dtype=np.float32)
+    for b in range(cqt_low.shape[0]):
+        bass_pc[b % 12, :] += cqt_low[b, :]
+
+    # Normalize per frame
+    bass_denom = np.sum(bass_pc, axis=0, keepdims=True)
+    bass_denom = np.where(bass_denom == 0, 1.0, bass_denom)
+    bass_pc = bass_pc / bass_denom
+
     # L2 normalize each frame (avoid division by 0)
     denom = np.linalg.norm(chroma, axis=0, keepdims=True)
     denom = np.where(denom == 0, 1.0, denom)
@@ -293,7 +321,8 @@ def compute_features(
     rms = librosa.feature.rms(y=y, hop_length=hop_length, frame_length=2048)[0].astype(np.float32)
     # Ensure same frame count
     n = min(chroma.shape[1], rms.shape[0])
-    return chroma[:, :n], rms[:n]
+    n2 = min(n, bass_pc.shape[1])
+    return chroma[:, :n2], rms[:n2], bass_pc[:, :n2]
 
 
 # ----------------------------
@@ -450,7 +479,7 @@ def transcribe_file(
     y, sr = load_audio_mono(wav_path, target_sr=target_sr)
     hop_length = max(32, int(round(sr * hop_s)))
 
-    chroma, rms = compute_features(
+    chroma, rms, bass_pc = compute_features(
         y,
         sr,
         hop_length=hop_length,
@@ -462,6 +491,11 @@ def transcribe_file(
     templates = build_templates(states)
 
     scores = score_frames(chroma, templates)
+    bass_weight = 0.45
+    for si, st in enumerate(states):
+        if st.quality == "N":
+            continue
+        scores[si, :] += bass_weight * bass_pc[st.root_i, :]
 
     # Add a no-chord score based on RMS gate: if quiet -> strong N
     # Last state is N

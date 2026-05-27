@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 
-from offline_chords import transcribe_file
+from svco.offline_chords import transcribe_file
 
 
 def _sine(sr: int, freq: float, dur_s: float) -> np.ndarray:

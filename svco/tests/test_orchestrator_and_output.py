@@ -1,7 +1,7 @@
 import unittest
 
-from agent_orchestrator import parse_dual_channel_response
-from output_synthesis import parse_response_json, process_agent_response
+from svco.agent_orchestrator import parse_dual_channel_response
+from svco.output_synthesis import parse_response_json, process_agent_response
 
 
 class DualChannelParsingTests(unittest.TestCase):
