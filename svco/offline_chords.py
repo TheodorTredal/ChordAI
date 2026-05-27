@@ -299,16 +299,17 @@ def compute_features(
         )
     ).astype(np.float32)  # shape: (bins, frames)
 
-    # Focus on lowest ~2 octaves to approximate bass/root
-    low_bins = min(cqt.shape[0], 2 * bins_per_octave)
+    # Focus on lowest ~1 octave to approximate bass/root (sharper than 2 octaves)
+    low_bins = min(cqt.shape[0], 1 * bins_per_octave)
     cqt_low = cqt[:low_bins, :]
 
-    # Fold bins -> pitch class (12)
+    # Fold bins -> pitch class (12) using max-pooling to emphasize the strongest bass partial
     bass_pc = np.zeros((12, cqt_low.shape[1]), dtype=np.float32)
     for b in range(cqt_low.shape[0]):
-        bass_pc[b % 12, :] += cqt_low[b, :]
+        pc = b % 12
+        bass_pc[pc, :] = np.maximum(bass_pc[pc, :], cqt_low[b, :])
 
-    # Normalize per frame
+    # Normalize per frame (keep it peaky)
     bass_denom = np.sum(bass_pc, axis=0, keepdims=True)
     bass_denom = np.where(bass_denom == 0, 1.0, bass_denom)
     bass_pc = bass_pc / bass_denom
@@ -491,7 +492,7 @@ def transcribe_file(
     templates = build_templates(states)
 
     scores = score_frames(chroma, templates)
-    bass_weight = 0.45
+    bass_weight = 1.25
     for si, st in enumerate(states):
         if st.quality == "N":
             continue

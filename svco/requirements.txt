@@ -6,4 +6,5 @@ librosa
 sounddevice
 numpy
 typing_extensions
+torchaudio
 # If needed: the actual MCP Python SDK, Kokoro-82M, and KPipeline (update as appropriate)

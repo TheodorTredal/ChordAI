@@ -16,9 +16,63 @@ PITCH_CLASSES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"
 
 class UserTurnPayload(TypedDict):
     user_speech: str
-    user_chords: List[str]
+    user_chords: List[Any]   # was List[str]
     user_instruction: str
+def transcribe_chords_offline_from_pcm(
+    chord_bytes: bytes,
+    *,
+    pcm_sr: int,
+    pcm_channels: int = 1,
+    sample_width_bytes: int = 2,  # int16
+    hop_s: float = 0.10,
+    min_seg_s: float = 0.50,
+    change_cost: float = 2.0,
+    rms_threshold: float = 0.01,
+):
+    """
+    Convert raw PCM int16 audio bytes to a temp WAV and run offline chord transcription.
+    Returns the offline_chords JSON dict (with segments).
+    """
+    if not chord_bytes:
+        return {"segments": [], "params": {}, "sr": None}
 
+    import tempfile
+    import wave
+    import numpy as np
+
+    # Lazy import to avoid import-time failures in environments without librosa deps
+    from svco.offline_chords import transcribe_file
+
+    # Validate buffer length
+    if len(chord_bytes) < sample_width_bytes * pcm_channels:
+        return {"segments": [], "params": {}, "sr": None}
+
+    # Write WAV (PCM_16)
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+        wav_path = tmp.name
+
+    try:
+        with wave.open(wav_path, "wb") as wf:
+            wf.setnchannels(pcm_channels)
+            wf.setsampwidth(sample_width_bytes)
+            wf.setframerate(pcm_sr)
+            wf.writeframes(chord_bytes)
+
+        result = transcribe_file(
+            wav_path,
+            target_sr=22050,          # analysis SR
+            hop_s=hop_s,
+            min_seg_s=min_seg_s,
+            change_cost=change_cost,
+            rms_threshold=rms_threshold,
+        )
+        return result
+    finally:
+        import os
+        try:
+            os.remove(wav_path)
+        except OSError:
+            pass
 
 def transcribe_voice(speech_bytes: bytes) -> str:
     """Transcribe speech bytes with local pywhispercpp bindings."""
@@ -121,8 +175,26 @@ def build_payload(user_speech: str, user_chords: List[str], user_instruction: st
 
 
 def process_turn(speech_bytes: bytes, chord_bytes: bytes, user_instruction: str) -> UserTurnPayload:
+    speech_text = transcribe_voice(speech_bytes)
+
+    # IMPORTANT: set this to whatever your stream_ingest actually uses for chord audio
+    # If your chord buffer is recorded at 16000 in stream_ingest, keep 16000.
+    CHORD_PCM_SR = SAMPLE_RATE  # replace with config if you have one
+
+    chord_result = transcribe_chords_offline_from_pcm(
+        chord_bytes,
+        pcm_sr=CHORD_PCM_SR,
+        hop_s=0.10,
+        min_seg_s=0.50,
+        change_cost=2.0,
+        rms_threshold=0.01,
+    )
+
+    # You can send full segments...
+    chord_segments = chord_result.get("segments", [])
+
     return build_payload(
-        user_speech=transcribe_voice(speech_bytes),
-        user_chords=transcribe_chords(chord_bytes),
+        user_speech=speech_text,
+        user_chords=chord_segments,
         user_instruction=user_instruction,
     )
