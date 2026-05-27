@@ -1,10 +1,8 @@
-// lyrics_runner wraps gemma4_lyrics.py as a subprocess and streams its output
-// token by token via a callback so the executor can forward tokens to the
-// WebSocket client in real time.
+// lyrics_runner wraps lyric_generator_gemma4.py as a subprocess and reads
+// the resulting JSON for clean lyrics output.
 package models
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -17,14 +15,9 @@ import (
 	"chordai/server/schemas"
 )
 
-// TokenCallback is called for each token streamed from the lyrics model.
-// Returning an error cancels the stream.
-type TokenCallback func(token string) error
-
-// RunLyricsModel calls gemma4_lyrics.py with the given SongSpec and decision,
-// streams stdout tokens via onToken, and returns the complete lyrics string.
-// If onToken is nil, streaming is skipped and the full output is returned only.
-func RunLyricsModel(spec *schemas.SongSpec, scriptDir string, onToken TokenCallback) (string, error) {
+// RunLyricsModel calls lyric_generator_gemma4.py, waits for it to finish,
+// then reads the lyrics from the saved JSON file.
+func RunLyricsModel(spec *schemas.SongSpec, scriptDir string) (string, error) {
 	// Script lives at models/lyric_generator_gemma4.py relative to the project root.
 	args := []string{
 		"models/lyric_generator_gemma4.py",
@@ -39,46 +32,28 @@ func RunLyricsModel(spec *schemas.SongSpec, scriptDir string, onToken TokenCallb
 
 	cmd := exec.Command("python3", args...)
 	cmd.Dir = scriptDir
-
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return "", fmt.Errorf("lyrics model stdout pipe: %w", err)
-	}
+	// Route all Python stdout/stderr to the server's stderr so rich console
+	// output never leaks into the lyrics result.
+	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Start(); err != nil {
 		return "", fmt.Errorf("lyrics model start: %w", err)
 	}
 
-	var sb strings.Builder
-	scanner := bufio.NewScanner(stdout)
-	scanner.Split(bufio.ScanRunes) // scan character by character for real-time streaming
-
-	for scanner.Scan() {
-		token := scanner.Text()
-		sb.WriteString(token)
-		if onToken != nil {
-			if err := onToken(token); err != nil {
-				cmd.Process.Kill()
-				return sb.String(), err
-			}
-		}
-	}
-
 	if err := cmd.Wait(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
-			return sb.String(), fmt.Errorf("lyrics model exited %d", exitErr.ExitCode())
+			return "", fmt.Errorf("lyrics model exited %d", exitErr.ExitCode())
 		}
-		return sb.String(), fmt.Errorf("lyrics model: %w", err)
+		return "", fmt.Errorf("lyrics model: %w", err)
 	}
 
-	// If the model saved a JSON file, read lyrics from it as the authoritative source.
-	// This handles cases where the model output contains rich/console markup.
-	if jsonLyrics, err := readLatestLyricsJSON(filepath.Join(scriptDir, "out-chords")); err == nil {
-		return jsonLyrics, nil
+	// Read lyrics from the saved JSON — the single source of truth.
+	lyrics, err := readLatestLyricsJSON(filepath.Join(scriptDir, "out-chords"))
+	if err != nil {
+		return "", fmt.Errorf("lyrics model: could not read output JSON: %w", err)
 	}
-
-	return sb.String(), nil
+	return lyrics, nil
 }
 
 // readLatestLyricsJSON finds the most recently written lyrics JSON in outDir

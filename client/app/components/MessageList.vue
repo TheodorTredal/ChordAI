@@ -1,80 +1,84 @@
 <script setup lang="ts">
 import type { ChatMessage } from '~/types'
 
-defineProps<{
+const props = defineProps<{
   messages: readonly ChatMessage[]
   currentStage: string
   currentStageStatus: string
 }>()
 
-const listEl = ref<HTMLElement | null>(null)
+const bottomEl = ref<HTMLElement | null>(null)
 
-// Auto-scroll to bottom whenever messages change or text streams in
+function scrollToBottom() {
+  nextTick(() => bottomEl.value?.scrollIntoView({ behavior: 'smooth' }))
+}
+
+// Scroll when a new message is added
+watch(() => props.messages.length, scrollToBottom)
+
+// Scroll when a response finishes (stageStatus goes to done/error)
 watch(
-  () => listEl.value?.scrollHeight,
-  () => {
-    nextTick(() => {
-      if (listEl.value) {
-        listEl.value.scrollTop = listEl.value.scrollHeight
-      }
-    })
-  },
+  () => props.messages.map(m => m.stageStatus).join(','),
+  scrollToBottom,
 )
 </script>
 
 <template>
-  <div ref="listEl" class="flex flex-col gap-6 overflow-y-auto px-4 py-6">
-    <!-- Empty state -->
-    <div v-if="messages.length === 0" class="flex flex-1 flex-col items-center justify-center gap-3 py-24 text-center">
-      <div class="text-4xl">🎵</div>
-      <h2 class="text-xl font-semibold text-zinc-200">ChordAI</h2>
-      <p class="max-w-sm text-sm text-zinc-500">
-        Describe a song and I'll generate chord progressions and lyrics.<br>
-        Try <em>"something melancholic like early Radiohead"</em> or <em>"upbeat 80s pop song about summer"</em>.
-      </p>
+  <div class="flex flex-col gap-8 px-6 py-8">
+    <!-- Constrained content column -->
+    <div class="mx-auto w-full max-w-3xl space-y-8">
+
+      <!-- Empty state -->
+      <div v-if="messages.length === 0" class="flex flex-col items-center justify-center gap-4 py-32 text-center">
+        <div class="text-5xl">🎵</div>
+        <h2 class="text-2xl font-semibold text-zinc-200">ChordAI</h2>
+        <p class="max-w-md text-base text-zinc-500">
+          Describe a song and I'll generate chord progressions and lyrics.<br>
+          Try <em>"something melancholic like early Radiohead"</em> or <em>"upbeat 80s pop song about summer"</em>.
+        </p>
+      </div>
+
+      <template v-for="msg in messages" :key="msg.id">
+        <!-- User message -->
+        <div v-if="msg.role === 'user'" class="flex justify-end">
+          <div class="max-w-xl rounded-2xl rounded-tr-sm bg-emerald-700 px-5 py-3.5 text-base text-white shadow">
+            {{ msg.text }}
+          </div>
+        </div>
+
+        <!-- Assistant message -->
+        <div v-else class="flex justify-start">
+          <div class="w-full space-y-4 rounded-2xl rounded-tl-sm bg-zinc-800 px-6 py-5 shadow">
+            <!-- Pipeline status while generating -->
+            <StatusBar
+              v-if="msg.stageStatus !== 'done' && msg.stageStatus !== 'error'"
+              :stage="currentStage"
+              :status="currentStageStatus"
+            />
+
+            <!-- Error state -->
+            <div v-if="msg.error" class="rounded-lg bg-red-900/30 px-4 py-3 text-base text-red-400">
+              {{ msg.error }}
+            </div>
+
+            <!-- Show result only when fully done -->
+            <SongOutput v-if="msg.result" :result="msg.result" />
+
+            <!-- Music equaliser animation while waiting -->
+            <div v-else-if="!msg.error" class="flex items-end gap-1 h-8">
+              <span class="w-1.5 rounded-sm bg-emerald-500 animate-eq1" />
+              <span class="w-1.5 rounded-sm bg-emerald-400 animate-eq2" />
+              <span class="w-1.5 rounded-sm bg-emerald-500 animate-eq3" />
+              <span class="w-1.5 rounded-sm bg-emerald-400 animate-eq4" />
+              <span class="w-1.5 rounded-sm bg-emerald-500 animate-eq5" />
+              <span class="ml-3 text-sm text-zinc-500 self-center">Composing…</span>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- Scroll anchor -->
+      <div ref="bottomEl" />
     </div>
-
-    <template v-for="msg in messages" :key="msg.id">
-      <!-- User message -->
-      <div v-if="msg.role === 'user'" class="flex justify-end">
-        <div class="max-w-lg rounded-2xl rounded-tr-sm bg-emerald-700 px-4 py-3 text-sm text-white shadow">
-          {{ msg.text }}
-        </div>
-      </div>
-
-      <!-- Assistant message -->
-      <div v-else class="flex justify-start">
-        <div class="w-full max-w-2xl space-y-3 rounded-2xl rounded-tl-sm bg-zinc-800 px-4 py-4 shadow">
-          <!-- Pipeline status while generating -->
-          <StatusBar
-            v-if="msg.stageStatus !== 'done' && msg.stageStatus !== 'error'"
-            :stage="currentStage"
-            :status="currentStageStatus"
-          />
-
-          <!-- Error state -->
-          <div v-if="msg.error" class="rounded-lg bg-red-900/30 px-3 py-2 text-sm text-red-400">
-            {{ msg.error }}
-          </div>
-
-          <!-- Streaming / done: show SongOutput if result exists, else raw streaming text -->
-          <SongOutput v-if="msg.result" :result="msg.result" />
-          <pre
-            v-else-if="msg.text"
-            class="whitespace-pre-wrap font-mono text-sm text-zinc-300 leading-relaxed"
-          >{{ msg.text }}<span v-if="msg.stageStatus === 'streaming'" class="animate-pulse">▍</span></pre>
-
-          <!-- Thinking spinner before any text arrives -->
-          <div
-            v-else-if="!msg.error"
-            class="flex items-center gap-2 text-sm text-zinc-500"
-          >
-            <span class="inline-block h-2 w-2 animate-bounce rounded-full bg-zinc-500" />
-            <span class="inline-block h-2 w-2 animate-bounce rounded-full bg-zinc-500 [animation-delay:150ms]" />
-            <span class="inline-block h-2 w-2 animate-bounce rounded-full bg-zinc-500 [animation-delay:300ms]" />
-          </div>
-        </div>
-      </div>
-    </template>
   </div>
 </template>

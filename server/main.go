@@ -38,6 +38,11 @@ func main() {
 		AllowWebSockets:  true,
 	}))
 
+	// GET /api/ping — connectivity test
+	r.GET("/api/ping", func(c *gin.Context) {
+		c.JSON(200, gin.H{"status": "ok", "message": "ChordAI server is reachable"})
+	})
+
 	// POST /api/generate — blocking REST endpoint
 	api := r.Group("/api")
 	routers.RegisterAPIRoutes(api, scriptDir)

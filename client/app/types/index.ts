@@ -14,7 +14,7 @@ export interface SongResult {
   decade: number
   tempo_bpm: number
   vibe: string
-  sections: Record<string, string[]>
+  sections: Record<string, readonly string[]>
   raw_tokens: string
   lyrics: string
 }

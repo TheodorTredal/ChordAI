@@ -48,16 +48,8 @@ func Run(decision *schemas.PlannerDecision, scriptDir string, onEvent EventCallb
 			}
 			emit(schemas.WSEvent{Stage: stage, Status: "running"})
 
-			tokenCb := func(token string) error {
-				emit(schemas.WSEvent{Stage: stage, Status: "streaming", Token: token})
-				return nil
-			}
-			if onEvent == nil {
-				tokenCb = nil // no streaming for REST endpoint
-			}
-
 			var err error
-			lyrics, err = models.RunLyricsModel(spec, scriptDir, tokenCb)
+			lyrics, err = models.RunLyricsModel(spec, scriptDir)
 			if err != nil {
 				emit(schemas.WSEvent{Stage: stage, Status: "error", Error: err.Error()})
 				return nil, fmt.Errorf("lyrics_model: %w", err)

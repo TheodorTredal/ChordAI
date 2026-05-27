@@ -1,0 +1,77 @@
+Genre  : ROCK
+Decade : 1960s
+Tempo  : 120 BPM
+Vibe   : melancholic and nostalgic
+Chords : <bos> <genre:rock> <decade:1960> <verse> E A D B <chorus> E A D B <bridge> D B E A <eos>
+──────────────────────────────────────────────────
+
+[Intro]
+(Chords: E A D B)
+E A D B
+(Driving, echoing guitar motif)
+
+[Verse 1]
+(Chords: E A D B)
+E A D B
+Concrete angels whispered promises in the smog-stained air
+E A D B
+Painted slogans fading fast on the brick wall of despair
+E A D B
+We were riding rainbows on the back of a tired mule
+E A D B
+Searching for a meaning in a forgotten golden rule
+
+[Chorus]
+(Chords: E A D B)
+E A D B
+Oh, the summer ghost days, painted in the dust and neon glow
+E A D B
+A revolution whispered, a seed we couldn't make grow
+E A D B
+We chased the comet dust across the fields of endless doubt
+E A D B
+Now the beat is slowing down, and the signal's flicking out
+
+[Verse 2]
+(Chords: E A D B)
+E A D B
+Did we burn the map or did the journey just erase the lines?
+E A D B
+Remember afternoons beneath the sign of twisted vines?
+E A D B
+Talking truth into the microphone 'til our throats were raw and dry
+E A D B
+Just beneath the pale electric hum of a closing midnight sky
+
+[Chorus]
+(Chords: E A D B)
+E A D B
+Oh, the summer ghost days, painted in the dust and neon glow
+E A D B
+A revolution whispered, a seed we couldn't make grow
+E A D B
+We chased the comet dust across the fields of endless doubt
+E A D B
+Now the beat is slowing down, and the signal's flicking out
+
+[Bridge]
+(Chords: D B E A)
+D B E A
+We thought the curtain rising meant the dawn would finally break
+D B E A
+Just a blinding, perfect moment for the future's sake
+D B E A
+But the echoes only whisper of the promises we kept
+D B E A
+Sleep now, friend, sleep now, for the fever that we swept
+
+[Chorus]
+(Chords: E A D B)
+E A D B
+Oh, the summer ghost days, painted in the dust and neon glow
+E A D B
+A revolution whispered, a seed we couldn't make grow
+E A D B
+We chased the comet dust across the fields of endless doubt
+E A D B
+Now the beat is slowing down, and the signal's flicking out
