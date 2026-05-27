@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import tempfile
 import wave
-from typing import List, TypedDict
-import whisper
+from typing import List, TypedDict, Any
 import numpy as np
 import soundfile as sf
 import os
@@ -16,7 +15,7 @@ PITCH_CLASSES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"
 
 class UserTurnPayload(TypedDict):
     user_speech: str
-    user_chords: List[Any]   # was List[str]
+    user_chords: List[Any]
     user_instruction: str
 def transcribe_chords_offline_from_pcm(
     chord_bytes: bytes,
@@ -104,6 +103,7 @@ def transcribe_voice(speech_bytes: bytes) -> str:
     return ""
 
 def transcribe(speech_bytes, chord_bytes):
+    import whisper
     print("[transcription_engine] Transcribing buffers...")
 
     # --- Speech recognition using Whisper ---
@@ -166,7 +166,7 @@ def transcribe_chords(chord_bytes: bytes) -> List[str]:
     return [f"{PITCH_CLASSES[int(idx)]}maj" for idx in top_indices]
 
 
-def build_payload(user_speech: str, user_chords: List[str], user_instruction: str) -> UserTurnPayload:
+def build_payload(user_speech: str, user_chords: Any, user_instruction: str) -> UserTurnPayload:
     return {
         "user_speech": user_speech,
         "user_chords": user_chords,
