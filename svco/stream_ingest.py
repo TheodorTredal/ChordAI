@@ -13,7 +13,7 @@ import numpy as np
 import torch
 import time
 
-SAMPLE_RATE = 16_000
+SAMPLE_RATE = 48_000
 CHANNELS = 1
 CHUNK_SIZE = 512
 SPEECH_THRESHOLD = 0.5
@@ -78,7 +78,7 @@ def run_stream_ingest():
     CHUNK = 512
     FORMAT = pyaudio.paInt16
     CHANNELS = 1
-    RATE = 16000
+    RATE = 48000  # Silero VAD is trained on 8kHz, but we can capture at 48kHz and downsample in memory
 
     p = pyaudio.PyAudio()
 

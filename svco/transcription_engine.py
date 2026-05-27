@@ -9,7 +9,7 @@ import numpy as np
 import soundfile as sf
 import os
 
-SAMPLE_RATE = 16_000
+SAMPLE_RATE = 48000  # MUST match stream_ingest capture rate
 PITCH_CLASSES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
 
@@ -17,6 +17,7 @@ class UserTurnPayload(TypedDict):
     user_speech: str
     user_chords: List[Any]
     user_instruction: str
+
 def transcribe_chords_offline_from_pcm(
     chord_bytes: bytes,
     *,
@@ -30,23 +31,21 @@ def transcribe_chords_offline_from_pcm(
 ):
     """
     Convert raw PCM int16 audio bytes to a temp WAV and run offline chord transcription.
-    Returns the offline_chords JSON dict (with segments).
+
+    Returns:
+      dict with keys like {"segments": [...], "sr": ..., "params": ...}
+      (whatever svco.offline_chords.transcribe_file returns)
     """
     if not chord_bytes:
         return {"segments": [], "params": {}, "sr": None}
 
-    import tempfile
-    import wave
-    import numpy as np
-
-    # Lazy import to avoid import-time failures in environments without librosa deps
+    # Lazy import so importing transcription_engine doesn't require librosa at import-time
     from svco.offline_chords import transcribe_file
 
     # Validate buffer length
     if len(chord_bytes) < sample_width_bytes * pcm_channels:
         return {"segments": [], "params": {}, "sr": None}
 
-    # Write WAV (PCM_16)
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
         wav_path = tmp.name
 
@@ -57,17 +56,15 @@ def transcribe_chords_offline_from_pcm(
             wf.setframerate(pcm_sr)
             wf.writeframes(chord_bytes)
 
-        result = transcribe_file(
+        return transcribe_file(
             wav_path,
-            target_sr=22050,          # analysis SR
+            target_sr=22050,  # analysis SR
             hop_s=hop_s,
             min_seg_s=min_seg_s,
             change_cost=change_cost,
             rms_threshold=rms_threshold,
         )
-        return result
     finally:
-        import os
         try:
             os.remove(wav_path)
         except OSError:
@@ -102,46 +99,67 @@ def transcribe_voice(speech_bytes: bytes) -> str:
 
     return ""
 
-def transcribe(speech_bytes, chord_bytes):
-    import whisper
+def transcribe(speech_bytes: bytes, chord_bytes: bytes):
+    """
+    Legacy entrypoint used by some code paths.
+
+    Produces:
+      - user_speech: Whisper transcript (if whisper is installed) OR a fallback string
+      - user_chords: offline chord segments (list[dict])
+      - user_instruction: currently same as user_speech
+    """
     print("[transcription_engine] Transcribing buffers...")
 
-    # --- Speech recognition using Whisper ---
+    # --- Speech recognition using Whisper (optional) ---
     user_speech = ""
     if speech_bytes and len(speech_bytes) > 0:
-        # Convert buffer to temp WAV for Whisper
-        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp:
-            # Decode raw PCM and write as WAV
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
             audio = np.frombuffer(speech_bytes, dtype=np.int16)
-            sf.write(tmp, audio, samplerate=16000, subtype='PCM_16')
+            sf.write(tmp, audio, samplerate=SAMPLE_RATE, subtype="PCM_16")
             tmp_path = tmp.name
-        
+
         try:
-            model = whisper.load_model("base")  # You can use "tiny" or "small" for speed
-            result = model.transcribe(tmp_path, fp16=False)
-            user_speech = result.get('text', '').strip()
+            try:
+                import whisper  # provided by openai-whisper
+            except ImportError:
+                whisper = None
+
+            if whisper is None:
+                user_speech = "(whisper not installed)"
+            else:
+                model = whisper.load_model("base")  # tiny/small for speed
+                result = model.transcribe(tmp_path, fp16=False)
+                user_speech = result.get("text", "").strip()
         finally:
-            os.remove(tmp_path)
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
     else:
         user_speech = "(no speech detected)"
 
-    # --- Chord recognition [stub, implement later] ---
-    # Real chord recognition is research-level; stub returns a dummy
-    user_chords = []
+    # --- Chord recognition (offline segments) ---
     if chord_bytes and len(chord_bytes) > 0:
-        # TODO: Replace this dummy with a real system if desired
-        user_chords = ["C", "G", "Am", "F"]
+        chord_result = transcribe_chords_offline_from_pcm(
+            chord_bytes,
+            pcm_sr=SAMPLE_RATE,  # MUST match stream_ingest capture rate
+            hop_s=0.10,
+            min_seg_s=0.50,
+            change_cost=2.0,
+            rms_threshold=0.01,
+        )
+        user_chords = chord_result.get("segments", [])
     else:
         user_chords = []
 
-    # You could apply some logic to extract an "instruction" from the transcript.
     user_instruction = user_speech if user_speech else ""
 
     return {
         "user_speech": user_speech,
         "user_chords": user_chords,
-        "user_instruction": user_instruction
+        "user_instruction": user_instruction,
     }
+    
 def transcribe_chords(chord_bytes: bytes) -> List[str]:
     """Mock lightweight chord identification based on chroma peak strength."""
     if not chord_bytes:
@@ -173,24 +191,18 @@ def build_payload(user_speech: str, user_chords: Any, user_instruction: str) -> 
         "user_instruction": user_instruction,
     }
 
-
 def process_turn(speech_bytes: bytes, chord_bytes: bytes, user_instruction: str) -> UserTurnPayload:
     speech_text = transcribe_voice(speech_bytes)
 
-    # IMPORTANT: set this to whatever your stream_ingest actually uses for chord audio
-    # If your chord buffer is recorded at 16000 in stream_ingest, keep 16000.
-    CHORD_PCM_SR = SAMPLE_RATE  # replace with config if you have one
-
+    # IMPORTANT: this must match whatever stream_ingest.py captures
     chord_result = transcribe_chords_offline_from_pcm(
         chord_bytes,
-        pcm_sr=CHORD_PCM_SR,
+        pcm_sr=SAMPLE_RATE,
         hop_s=0.10,
         min_seg_s=0.50,
         change_cost=2.0,
         rms_threshold=0.01,
     )
-
-    # You can send full segments...
     chord_segments = chord_result.get("segments", [])
 
     return build_payload(
