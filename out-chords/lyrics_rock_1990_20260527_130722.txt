@@ -1,0 +1,76 @@
+Genre  : ROCK
+Decade : 1990s
+Tempo  : 90 BPM
+Vibe   : melancholic and detached
+Chords : <bos> <genre:rock> <decade:1990> <verse> E A D B <chorus> E A D B <bridge> D B E A <eos>
+──────────────────────────────────────────────────
+
+[Intro]
+(Chords: E A D B)
+(Strumming pattern: slow, deliberate, slightly distorted)
+The air conditioning hums a broken tune
+Another Tuesday afternoon, beneath a busted moon
+We’re tracing patterns in the dust, on chipped laminate wood
+Doing nothing really good, misunderstood.
+
+[Verse 1]
+(Chords: E A D B)
+E A D B
+Stare at the graffiti ghosts on the side of the street
+Every slogan painted out, every promise incomplete
+E A D B
+Got my denim jacket on, hiding nothing but the seams
+Just wandering through the town, living in broken dreams.
+
+[Chorus]
+(Chords: E A D B)
+E A D B
+We’re just running on fumes and faded stereo sound
+Another empty promise echoing around this town
+E A D B
+Yeah, we’re tuned out, baby, faded to gray and blue
+Just waiting for the feeling that we used to know how to.
+
+[Verse 2]
+(Chords: E A D B)
+E A D B
+You said the static glow was magic, said it felt like home
+Now it just smells like stale smoke and seeds we never sowed to roam
+E A D B
+We trade our apathy like currency, chipped and worn and cheap
+Just another stain of history that the concrete starts to keep.
+
+[Chorus]
+(Chords: E A D B)
+E A D B
+We’re just running on fumes and faded stereo sound
+Another empty promise echoing around this town
+E A D B
+Yeah, we’re tuned out, baby, faded to gray and blue
+Just waiting for the feeling that we used to know how to.
+
+[Bridge]
+(Chords: D B E A)
+D B E A
+Said we were supposed to be the antidote to the lie
+But we just settled for the cheap high beneath a rainy sky
+D B E A
+Don't need the fireworks show, don't need the big mistake
+Just the silence after the noise, for goodness sake.
+
+[Chorus]
+(Chords: E A D B)
+E A D B
+We’re just running on fumes and faded stereo sound
+Another empty promise echoing around this town
+E A D B
+Yeah, we’re tuned out, baby, faded to gray and blue
+Just waiting for the feeling that we used to know how to.
+
+[Outro]
+(Chords: E A D B)
+E A D B
+Used to know how to...
+(Repeat and fade out slowly on E A D B)
+Know how to...
+Yeah... just like this.

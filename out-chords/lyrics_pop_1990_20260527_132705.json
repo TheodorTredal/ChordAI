@@ -1,0 +1,28 @@
+{
+  "genre": "pop",
+  "decade": 1990,
+  "tempo_bpm": 90,
+  "vibe": "melancholic and introspective",
+  "sections": {
+    "verse": [
+      "C",
+      "G",
+      "Am",
+      "F"
+    ],
+    "chorus": [
+      "C",
+      "G",
+      "Am",
+      "F"
+    ],
+    "bridge": [
+      "Am",
+      "F",
+      "C",
+      "G"
+    ]
+  },
+  "raw_tokens": "<bos> <genre:alternative rock> <decade:1990> <verse> C G Am F <chorus> C G Am F <bridge> Am F C G <eos>",
+  "lyrics": "[Intro] (Chords: C G Am F)\n(C) Streetlights bleeding through the pane\n(G) Just another Tuesday night again\n(Am) Static hum beneath the rain\n(F) Whispering what we both pretend\n\n[Verse 1] (Chords: C G Am F)\n(C) We were talking late beneath the haze\n(G) On a corner store that knew our name\n(Am) Trading cheap cigarettes and fading days\n(F) Playing out this predictable little game\n\n[Pre-Chorus] (Chords: C G Am F)\n(C) Said we were burning down the perfect scene\n(G) But the smoke just curled and disappeared\n(Am) Nothing that we felt was ever truly keen\n(F) Just the ghost of something that we feared\n\n[Chorus] (Chords: C G Am F)\n(C) Yeah, we\u2019re caught in the glow of the afterglow\n(G) Just static noise where the feeling used to be\n(Am) Another truth we never meant to know\n(F) Stuck on repeat, just you and me\n\n[Verse 2] (Chords: C G Am F)\n(C) Remember when we felt like we could fly\n(G) Before the curtain started to descend\n(Am) Like we owned the moment passing by\n(F) Now the sugar rush has reached its end\n\n[Pre-Chorus] (Chords: C G Am F)\n(C) Said we were burning down the perfect scene\n(G) But the smoke just curled and disappeared\n(Am) Nothing that we felt was ever truly keen\n(F) Just the ghost of something that we feared\n\n[Chorus] (Chords: C G Am F)\n(C) Yeah, we\u2019re caught in the glow of the afterglow\n(G) Just static noise where the feeling used to be\n(Am) Another truth we never meant to know\n(F) Stuck on repeat, just you and me\n\n[Bridge] (Chords: Am F C G)\n(Am) Maybe we were never meant to be so bright\n(F) Just disposable for the passing tide\n(C) We were always just surviving through the night\n(G) With nowhere left for us to hide\n\n[Chorus] (Chords: C G Am F)\n(C) Yeah, we\u2019re caught in the glow of the afterglow\n(G) Just static noise where the feeling used"
+}
