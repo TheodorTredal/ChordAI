@@ -28,7 +28,7 @@ def _chord(sr: int, freqs: list[float], dur_s: float) -> np.ndarray:
 
 def test_synthetic_progression_detects_expected_labels():
     # Build a simple progression: Am | F | G7 | Dsus4
-    sr = 48000
+    sr = 16000
     dur = 2.0
 
     # Frequencies (A4=440) basic equal temperament

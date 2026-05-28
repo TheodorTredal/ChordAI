@@ -78,7 +78,7 @@ def run_stream_ingest():
     CHUNK = 512
     FORMAT = pyaudio.paInt16
     CHANNELS = 1
-    RATE = 48000  # Silero VAD is trained on 8kHz, but we can capture at 48kHz and downsample in memory
+    RATE = 16000  # Silero VAD is trained on 8kHz, but we can capture at 48kHz and downsample in memory
 
     p = pyaudio.PyAudio()
 

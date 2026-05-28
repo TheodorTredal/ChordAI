@@ -41,7 +41,7 @@ class LocalSpeechSynthesizer:
         pipeline = self._ensure_pipeline()
         for chunk in pipeline(speech_text):
             audio = getattr(chunk, "audio", None)
-            sample_rate = getattr(chunk, "sample_rate", 48000)
+            sample_rate = getattr(chunk, "sample_rate", 16000)
             if audio is None:
                 continue
             sd.play(audio, sample_rate)
