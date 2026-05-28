@@ -1,0 +1,45 @@
+Genre  : POP
+Decade : 1990s
+Tempo  : 90 BPM
+Vibe   : melancholic and introspective
+Chords : <bos> <genre:alternative rock> <decade:1990> <verse> C G Am F <chorus> C G Am F <bridge> Am F C G <eos>
+──────────────────────────────────────────────────
+
+[Intro] (Chords: C G Am F)
+(Strumming pattern suggestion: simple, slightly delayed, guitar echo)
+
+[Verse 1] (Chords: C G Am F)
+The streetlights hum a tired sound tonight,
+We’re moving slow beneath the neon haze,
+Another Friday ending up in pale moonlight,
+Just counting down the lost and empty days.
+
+[Chorus] (Chords: C G Am F)
+Oh, we're running on cheap static and faded gold,
+A photograph that doesn't look quite real,
+A story that was never meant to be told,
+Just the bitter truth of how we used to feel.
+
+[Verse 2] (Chords: C G Am F)
+You wear that jacket like it hides a secret flaw,
+We trade our futures for a fleeting high,
+We stand here guessing at the breaking of the law,
+Beneath a bruised and uninterested sky.
+
+[Chorus] (Chords: C G Am F)
+Oh, we're running on cheap static and faded gold,
+A photograph that doesn't look quite real,
+A story that was never meant to be told,
+Just the bitter truth of how we used to feel.
+
+[Bridge] (Chords: Am F C G)
+Did we ever really know what we were chasing?
+Or was it just the comfort of the sound?
+Was every promise that we kept just erasing,
+The solid ground we thought we finally found?
+
+[Chorus] (Chords: C G Am F)
+Oh, we're running on cheap static and faded gold,
+A photograph that doesn't look quite real,
+A story that was never meant to be told,
+Just the bitter truth of how we used to feel.

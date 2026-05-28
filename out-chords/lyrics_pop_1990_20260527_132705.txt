@@ -1,0 +1,58 @@
+Genre  : POP
+Decade : 1990s
+Tempo  : 90 BPM
+Vibe   : melancholic and introspective
+Chords : <bos> <genre:alternative rock> <decade:1990> <verse> C G Am F <chorus> C G Am F <bridge> Am F C G <eos>
+──────────────────────────────────────────────────
+
+[Intro] (Chords: C G Am F)
+(C) Streetlights bleeding through the pane
+(G) Just another Tuesday night again
+(Am) Static hum beneath the rain
+(F) Whispering what we both pretend
+
+[Verse 1] (Chords: C G Am F)
+(C) We were talking late beneath the haze
+(G) On a corner store that knew our name
+(Am) Trading cheap cigarettes and fading days
+(F) Playing out this predictable little game
+
+[Pre-Chorus] (Chords: C G Am F)
+(C) Said we were burning down the perfect scene
+(G) But the smoke just curled and disappeared
+(Am) Nothing that we felt was ever truly keen
+(F) Just the ghost of something that we feared
+
+[Chorus] (Chords: C G Am F)
+(C) Yeah, we’re caught in the glow of the afterglow
+(G) Just static noise where the feeling used to be
+(Am) Another truth we never meant to know
+(F) Stuck on repeat, just you and me
+
+[Verse 2] (Chords: C G Am F)
+(C) Remember when we felt like we could fly
+(G) Before the curtain started to descend
+(Am) Like we owned the moment passing by
+(F) Now the sugar rush has reached its end
+
+[Pre-Chorus] (Chords: C G Am F)
+(C) Said we were burning down the perfect scene
+(G) But the smoke just curled and disappeared
+(Am) Nothing that we felt was ever truly keen
+(F) Just the ghost of something that we feared
+
+[Chorus] (Chords: C G Am F)
+(C) Yeah, we’re caught in the glow of the afterglow
+(G) Just static noise where the feeling used to be
+(Am) Another truth we never meant to know
+(F) Stuck on repeat, just you and me
+
+[Bridge] (Chords: Am F C G)
+(Am) Maybe we were never meant to be so bright
+(F) Just disposable for the passing tide
+(C) We were always just surviving through the night
+(G) With nowhere left for us to hide
+
+[Chorus] (Chords: C G Am F)
+(C) Yeah, we’re caught in the glow of the afterglow
+(G) Just static noise where the feeling used

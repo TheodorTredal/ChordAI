@@ -1,0 +1,28 @@
+{
+  "genre": "rock",
+  "decade": 1990,
+  "tempo_bpm": 90,
+  "vibe": "melancholic and detached",
+  "sections": {
+    "verse": [
+      "E",
+      "A",
+      "D",
+      "B"
+    ],
+    "chorus": [
+      "E",
+      "A",
+      "D",
+      "B"
+    ],
+    "bridge": [
+      "D",
+      "B",
+      "E",
+      "A"
+    ]
+  },
+  "raw_tokens": "<bos> <genre:rock> <decade:1990> <verse> E A D B <chorus> E A D B <bridge> D B E A <eos>",
+  "lyrics": "[Intro]\n(Chords: E A D B)\n(Strumming pattern: slow, deliberate, slightly distorted)\nThe air conditioning hums a broken tune\nAnother Tuesday afternoon, beneath a busted moon\nWe\u2019re tracing patterns in the dust, on chipped laminate wood\nDoing nothing really good, misunderstood.\n\n[Verse 1]\n(Chords: E A D B)\nE A D B\nStare at the graffiti ghosts on the side of the street\nEvery slogan painted out, every promise incomplete\nE A D B\nGot my denim jacket on, hiding nothing but the seams\nJust wandering through the town, living in broken dreams.\n\n[Chorus]\n(Chords: E A D B)\nE A D B\nWe\u2019re just running on fumes and faded stereo sound\nAnother empty promise echoing around this town\nE A D B\nYeah, we\u2019re tuned out, baby, faded to gray and blue\nJust waiting for the feeling that we used to know how to.\n\n[Verse 2]\n(Chords: E A D B)\nE A D B\nYou said the static glow was magic, said it felt like home\nNow it just smells like stale smoke and seeds we never sowed to roam\nE A D B\nWe trade our apathy like currency, chipped and worn and cheap\nJust another stain of history that the concrete starts to keep.\n\n[Chorus]\n(Chords: E A D B)\nE A D B\nWe\u2019re just running on fumes and faded stereo sound\nAnother empty promise echoing around this town\nE A D B\nYeah, we\u2019re tuned out, baby, faded to gray and blue\nJust waiting for the feeling that we used to know how to.\n\n[Bridge]\n(Chords: D B E A)\nD B E A\nSaid we were supposed to be the antidote to the lie\nBut we just settled for the cheap high beneath a rainy sky\nD B E A\nDon't need the fireworks show, don't need the big mistake\nJust the silence after the noise, for goodness sake.\n\n[Chorus]\n(Chords: E A D B)\nE A D B\nWe\u2019re just running on fumes and faded stereo sound\nAnother empty promise echoing around this town\nE A D B\nYeah, we\u2019re tuned out, baby, faded to gray and blue\nJust waiting for the feeling that we used to know how to.\n\n[Outro]\n(Chords: E A D B)\nE A D B\nUsed to know how to...\n(Repeat and fade out slowly on E A D B)\nKnow how to...\nYeah... just like this."
+}
