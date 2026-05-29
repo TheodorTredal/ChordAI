@@ -37,7 +37,7 @@ from collections import Counter, defaultdict
 
 import torch
 
-from model import GPTConfig, GPT
+from model_loader import load_any
 
 
 # ----------------------------------------------------------------------------- 
@@ -45,14 +45,7 @@ from model import GPTConfig, GPT
 # ----------------------------------------------------------------------------- 
 
 def load_model(out_dir, device):
-    ckpt = torch.load(os.path.join(out_dir, 'ckpt.pt'), map_location=device)
-    model = GPT(GPTConfig(**ckpt['model_args']))
-    sd = ckpt['model']
-    for k in list(sd.keys()):
-        if k.startswith('_orig_mod.'):
-            sd[k[len('_orig_mod.'):]] = sd.pop(k)
-    model.load_state_dict(sd)
-    model.eval().to(device)
+    model, ckpt, _ = load_any(out_dir, device)
     return model, ckpt
 
 

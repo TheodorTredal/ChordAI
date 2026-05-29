@@ -51,20 +51,7 @@ import numpy as np
 import pandas as pd
 import torch
 
-from model import GPTConfig, GPT
-
-
-def load_model(out_dir, device):
-    ckpt_path = os.path.join(out_dir, 'ckpt.pt')
-    checkpoint = torch.load(ckpt_path, map_location=device)
-    model = GPT(GPTConfig(**checkpoint['model_args']))
-    state_dict = checkpoint['model']
-    for k in list(state_dict.keys()):
-        if k.startswith('_orig_mod.'):
-            state_dict[k[len('_orig_mod.'):]] = state_dict.pop(k)
-    model.load_state_dict(state_dict)
-    model.eval().to(device)
-    return model, checkpoint
+from model_loader import load_any
 
 
 def stratified_val_df(df, val_frac, seed):
@@ -144,9 +131,9 @@ def pct(a, b):
 
 
 def run_one(out_dir, val_df, stoi, device, chord_ids, max_songs):
-    model, ckpt = load_model(out_dir, device)
+    model, ckpt, model_type = load_any(out_dir, device)
     block_size = ckpt['model_args']['block_size']
-    print(f"Evaluating {out_dir} (block_size={block_size}, "
+    print(f"Evaluating {out_dir} [{model_type}] (block_size={block_size}, "
           f"iter={ckpt.get('iter_num','?')}) on {len(val_df):,} val songs ...")
     agg, per_genre = evaluate(model, val_df, stoi, device, block_size,
                               chord_ids, max_songs=max_songs)
