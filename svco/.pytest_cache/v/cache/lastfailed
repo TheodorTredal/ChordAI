@@ -1,0 +1,5 @@
+{
+  "tests/test_offline_chords_synthetic.py": true,
+  "tests/test_orchestrator_and_output.py": true,
+  "tests/test_transcription_payload.py": true
+}
