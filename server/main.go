@@ -32,7 +32,7 @@ func main() {
 
 	// CORS — allow the Nuxt dev server and any client origin during development.
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:3000", "http://localhost:5173"},
+		AllowOrigins:     []string{"http://localhost:3000", "http://localhost:5173", "http://localhost:8000"},
 		AllowMethods:     []string{"GET", "POST", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept"},
 		AllowWebSockets:  true,
@@ -53,7 +53,7 @@ func main() {
 
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "8000"
+		port = "5555"
 	}
 
 	log.Printf("[main] ChordAI server listening on :%s", port)

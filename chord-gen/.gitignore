@@ -13,7 +13,8 @@ __pycache__/
 
 # C extensions
 *.so
-
+**/env/
+ChordAI/env
 # Distribution / packaging
 .Python
 build/
@@ -224,3 +225,5 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+.*out-chords

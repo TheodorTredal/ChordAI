@@ -63,7 +63,10 @@ export function useGenerate() {
 
   function streamViaWebSocket(input: PlannerInput, assistantId: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      const wsUrl = serverUrl.replace(/^http/, 'ws') + '/ws/generate'
+      // const wsUrl = serverUrl.replace(/^http/, 'ws') + '/ws/generate'
+      const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+      const wsUrl = `${proto}//${window.location.host}/ws/generate`
+      
       const ws = new WebSocket(wsUrl)
 
       const timeout = setTimeout(() => {
@@ -152,7 +155,8 @@ export function useGenerate() {
       msg.stageStatus = 'running'
     }
 
-    const resp = await fetch(`${serverUrl}/api/generate`, {
+    // const resp = await fetch(`${serverUrl}/api/generate`, {
+    const resp = await fetch('/api/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
