@@ -1,5 +1,5 @@
 """
-sample_chords.py — Sample chord progressions from a trained Chordonomicon GPT.
+sample.py — Sample chord progressions from a trained Chordonomicon GPT.
 
 Adapted from nanoGPT's sample.py with three changes for this model:
   1. WORD-LEVEL tokenization. Our tokens are whitespace-separated strings like
@@ -34,7 +34,7 @@ import os
 import pickle
 from contextlib import nullcontext
 import torch
-from model import GPTConfig, GPT
+from model_loader import load_any
 
 # ----------------------------------------------------------------------------- 
 # Defaults (override from the command line via configurator.py, e.g. --genre=rock)
@@ -76,18 +76,13 @@ ctx = (torch.amp.autocast(device_type='cuda', dtype=ptdtype)
        if device_type == 'cuda' else nullcontext())
 
 # --- load model ----------------------------------------------------------------
-ckpt_path = os.path.join(out_dir, 'ckpt.pt')
-checkpoint = torch.load(ckpt_path, map_location=device)
-gptconf = GPTConfig(**checkpoint['model_args'])
-model = GPT(gptconf)
-state_dict = checkpoint['model']
-unwanted_prefix = '_orig_mod.'
-for k, v in list(state_dict.items()):
-    if k.startswith(unwanted_prefix):
-        state_dict[k[len(unwanted_prefix):]] = state_dict.pop(k)
-model.load_state_dict(state_dict)
-model.eval()
-model.to(device)
+# Use the shared dispatcher so this script works for both architectures:
+#   * existing v1/v2 checkpoints have no 'model_type' field -> loaded as GPT
+#   * RNN checkpoints carry model_type='rnn' -> loaded as RNNLM
+# Both expose the same forward(idx, targets=None) -> (logits, last_pos) contract,
+# so the generation loop below is unchanged.
+model, checkpoint, model_type = load_any(out_dir, device)
+print(f"loaded {out_dir} as {model_type}")
 if compile:
     model = torch.compile(model)
 
