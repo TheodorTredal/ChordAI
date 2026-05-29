@@ -227,8 +227,11 @@ def print_report(out_dir, res):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument('--out_dir', default=None)
-    p.add_argument('--compare', nargs=2, default=None, metavar=('A', 'B'))
+    # Positional: 1+ checkpoint directories. With 1 -> single-model report.
+    # With 2+ -> N-way side-by-side, first listed is the reference for Δ.
+    p.add_argument('out_dirs', nargs='+',
+                   help="One or more checkpoint dirs. First listed = reference "
+                        "for Δ when multiple are given.")
     p.add_argument('--data-dir', default='data/chords')
     p.add_argument('--n-per-genre', type=int, default=300)
     p.add_argument('--decade', type=int, default=2010)
@@ -251,25 +254,72 @@ def main():
     genres = sorted(t[len('<genre:'):-1].replace('_', ' ')
                     for t in stoi if t.startswith('<genre:'))
 
-    dirs = args.compare if args.compare else [args.out_dir]
-    if dirs == [None]:
-        p.error("Provide --out_dir or --compare A B")
+    dirs = args.out_dirs
 
     results = {}
     for d in dirs:
         results[d] = evaluate_model(d, genres, stoi, itos, args.device, args)
+        # Always print the single-model report (helpful even in N-way mode —
+        # gives the full per-genre feature table for each model before the
+        # cross-model summary tables below).
         print_report(d, results[d])
 
-    if args.compare:
-        a, b = args.compare
-        print("\n" + "=" * 60)
-        print(f"GENRE SEPARATION SCORE (mean pairwise JSD)")
-        print(f"  A  {a:<28} {results[a]['mean_js']:.4f}")
-        print(f"  B  {b:<28} {results[b]['mean_js']:.4f}")
-        diff = results[b]['mean_js'] - results[a]['mean_js']
-        print(f"  Δ (B - A): {diff:+.4f}  "
-              f"-> {'B conditions more strongly' if diff > 0 else 'A conditions more strongly' if diff < 0 else 'equal'}")
-        print("=" * 60)
+    # --- N-way summary tables (only when 2+ models) --------------------------
+    if len(dirs) < 2:
+        return
+
+    # Short, unique display labels for the table headers.
+    labels = [os.path.basename(os.path.normpath(d)) or d for d in dirs]
+    seen = {}
+    for lab in labels:
+        seen[lab] = seen.get(lab, 0) + 1
+    if any(v > 1 for v in seen.values()):
+        labels = [f"{lab}#{i}" for i, lab in enumerate(labels)]
+    ref_label = labels[0]
+
+    print("\n" + "=" * 72)
+    print(f"N-WAY COMPARISON  (reference for Δ = {ref_label})")
+    print("=" * 72)
+
+    # 1) Genre-separation score (one number per model).
+    print("\nGENRE SEPARATION SCORE (mean pairwise JSD; higher = more distinct)")
+    ref_js = results[dirs[0]]['mean_js']
+    for d, lab in zip(dirs, labels):
+        js = results[d]['mean_js']
+        marker = "  (ref)" if d == dirs[0] else f"   Δ {js - ref_js:+.4f}"
+        print(f"  {lab:<28} {js:.4f}{marker}")
+
+    col_w = max(10, max(len(lab) for lab in labels) + 1)
+
+    # 2) Per-feature side-by-side: rows = genres, cols = models. We print one
+    # mini-table per musically-interpretable feature, so a reader can scan e.g.
+    # "jazz 7th rate across models" in a single row. This is the layout that
+    # makes "feature climbs RNN < v1 < v2" legible — the writeup-ready view.
+    feature_labels = [('seventh', '7th'), ('dim', 'dim'),
+                      ('extended', 'ext'), ('slash', 'slash')]
+    # Use the reference's genre order (sorted alpha for stability across runs).
+    ref_genres = sorted(results[dirs[0]]['genres'])
+    for fkey, fname in feature_labels:
+        print(f"\nPer-genre {fname} chord rate (% of generated chords)")
+        head = f"{'genre':<14}" + ''.join(f"{lab:>{col_w}}" for lab in labels)
+        print(head)
+        for g in ref_genres:
+            line = f"{g:<14}"
+            for d in dirs:
+                v = results[d]['genre_feats'].get(g, {}).get(fkey, 0.0) * 100
+                line += f"{v:>{col_w}.1f}"
+            print(line)
+
+    # 3) Per-genre meta (<eos> rate + mean length) compactly.
+    print(f"\nGeneration completeness: <eos> rate (%) per genre")
+    head = f"{'genre':<14}" + ''.join(f"{lab:>{col_w}}" for lab in labels)
+    print(head)
+    for g in ref_genres:
+        line = f"{g:<14}"
+        for d in dirs:
+            v = results[d]['genre_meta'].get(g, (0.0, 0.0))[0] * 100
+            line += f"{v:>{col_w}.0f}"
+        print(line)
 
 
 if __name__ == '__main__':

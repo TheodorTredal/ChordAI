@@ -142,10 +142,13 @@ def run_one(out_dir, val_df, stoi, device, chord_ids, max_songs):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument('--out_dir', default=None,
-                   help="Checkpoint dir to evaluate (single-model mode).")
-    p.add_argument('--compare', nargs=2, default=None, metavar=('DIR_A', 'DIR_B'),
-                   help="Two checkpoint dirs for a side-by-side table.")
+    # Positional: 1+ checkpoint directories. With 1 -> single-model report.
+    # With 2+ -> N-way comparison table; the FIRST listed acts as the reference
+    # for the Δ columns (natural for the project's "RNN v1 v2" baseline-first
+    # ordering, where Δ reads as "improvement over the baseline").
+    p.add_argument('out_dirs', nargs='+',
+                   help="One or more checkpoint dirs. First listed = reference "
+                        "for Δ columns when multiple are given.")
     p.add_argument('--data-dir', default='data/chords',
                    help="nanoGPT data dir holding meta.pkl.")
     p.add_argument('--clean-dir', default='cleaned',
@@ -181,10 +184,9 @@ def main():
     print(f"Reconstructed val split: {len(val_df):,} songs "
           f"(val_frac={args.val_frac}, seed={args.seed})\n")
 
-    dirs = args.compare if args.compare else [args.out_dir]
-    if dirs == [None]:
-        p.error("Provide --out_dir DIR or --compare DIR_A DIR_B")
+    dirs = args.out_dirs
 
+    # --- evaluate every model -------------------------------------------------
     results = {}
     for d in dirs:
         agg, per_genre = run_one(d, val_df, stoi, args.device, chord_ids,
@@ -194,33 +196,65 @@ def main():
         print(f"  AGGREGATE  top1 {pct(agg['top1'],agg['n']):5.2f}%   "
               f"top3 {pct(agg['top3'],agg['n']):5.2f}%   "
               f"(n={agg['n']:,} chord predictions)")
-        print("  per genre:")
-        for g in sorted(per_genre, key=lambda k: -per_genre[k]['n']):
-            s = per_genre[g]
-            print(f"    {g:<14} top1 {pct(s['top1'],s['n']):5.2f}%   "
-                  f"top3 {pct(s['top3'],s['n']):5.2f}%   (n={s['n']:,})")
+        if len(dirs) == 1:
+            # In single-model mode, also break down per-genre here. In N-way
+            # mode we skip this and go straight to the comparison table to keep
+            # the output digestible.
+            print("  per genre:")
+            for g in sorted(per_genre, key=lambda k: -per_genre[k]['n']):
+                s = per_genre[g]
+                print(f"    {g:<14} top1 {pct(s['top1'],s['n']):5.2f}%   "
+                      f"top3 {pct(s['top3'],s['n']):5.2f}%   (n={s['n']:,})")
         print()
 
-    # --- side-by-side comparison table --------------------------------------
-    if args.compare:
-        a, b = args.compare
-        (agg_a, pg_a), (agg_b, pg_b) = results[a], results[b]
-        print("=" * 72)
-        print(f"COMPARISON  (A = {a}   B = {b})")
-        print("=" * 72)
-        print(f"{'genre':<14}{'A top1':>9}{'B top1':>9}{'Δtop1':>8}"
-              f"{'A top3':>9}{'B top3':>9}{'Δtop3':>8}")
-        rows = ['__AGG__'] + sorted(pg_a, key=lambda k: -pg_a[k]['n'])
+    # --- N-way comparison table (only when 2+ checkpoints) -------------------
+    if len(dirs) < 2:
+        return
+
+    ref = dirs[0]                          # reference for Δ columns
+    # Use the reference's per-genre keys as the row set, sorted by n desc.
+    pg_ref = results[ref][1]
+    rows = ['__AGG__'] + sorted(pg_ref, key=lambda k: -pg_ref[k]['n'])
+
+    # Short display labels (basename of the path) so the header fits.
+    labels = [os.path.basename(os.path.normpath(d)) or d for d in dirs]
+    # Make labels unique if basenames collide.
+    seen = {}
+    for i, lab in enumerate(labels):
+        seen[lab] = seen.get(lab, 0) + 1
+    if any(v > 1 for v in seen.values()):
+        labels = [f"{lab}#{i}" for i, lab in enumerate(labels)]
+
+    # Pretty separator + title
+    title = f"N-WAY COMPARISON  (reference for Δ = {labels[0]})"
+    width = 14 + 9 * len(dirs) + 9 * (len(dirs) - 1)  # rough
+    print("=" * max(width, len(title)))
+    print(title)
+    print("=" * max(width, len(title)))
+
+    # Two stacked sub-tables (top1, top3) so the line width stays manageable as
+    # N grows. Column width adapts to the longest label so headers can't merge.
+    col_w = max(10, max(len(lab) for lab in labels) + 1)
+    for metric_name, metric_key in [('top1', 'top1'), ('top3', 'top3')]:
+        head = f"{'genre':<14}" + ''.join(f"{lab:>{col_w}}" for lab in labels)
+        for lab in labels[1:]:
+            dlab = f"Δ {lab}"
+            head += f"{dlab:>{col_w + 1}}"
+        print(f"\n[{metric_name}]")
+        print(head)
         for g in rows:
             if g == '__AGG__':
-                sa, sb, label = agg_a, agg_b, 'AGGREGATE'
+                stats = [results[d][0] for d in dirs]
+                label = 'AGGREGATE'
             else:
-                sa, sb, label = pg_a[g], pg_b.get(g, {'top1':0,'top3':0,'n':0}), g
-            a1, b1 = pct(sa['top1'],sa['n']), pct(sb['top1'],sb['n'])
-            a3, b3 = pct(sa['top3'],sa['n']), pct(sb['top3'],sb['n'])
-            print(f"{label:<14}{a1:>8.2f}{b1:>9.2f}{b1-a1:>+8.2f}"
-                  f"{a3:>9.2f}{b3:>9.2f}{b3-a3:>+8.2f}")
-        print("\nΔ > 0 means B (the second dir) is better than A.")
+                stats = [results[d][1].get(g, {'top1':0,'top3':0,'n':0}) for d in dirs]
+                label = g
+            vals = [pct(s[metric_key], s['n']) for s in stats]
+            line = f"{label:<14}" + ''.join(f"{v:>{col_w}.2f}" for v in vals)
+            for v in vals[1:]:
+                line += f"{v - vals[0]:>+{col_w + 1}.2f}"
+            print(line)
+    print(f"\nΔ > 0 means the model is better than the reference ({labels[0]}).")
 
 
 if __name__ == '__main__':
