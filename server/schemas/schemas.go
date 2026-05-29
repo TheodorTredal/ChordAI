@@ -44,6 +44,7 @@ type SongResult struct {
 	Sections  map[string][]string `json:"sections"`
 	RawTokens string              `json:"raw_tokens"`
 	Lyrics    string              `json:"lyrics"`
+	ImagePath string              `json:"image_path,omitempty"`
 }
 
 // WSEvent is a WebSocket status/streaming message sent to the client.
