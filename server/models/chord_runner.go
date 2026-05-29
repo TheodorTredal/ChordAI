@@ -1,9 +1,13 @@
-// chord_runner builds a SongSpec from the PlannerDecision.
-// When sample_chords.py is available, swap the stub for a real subprocess call.
+// chord_runner calls sample.py from chord-gen/nanoGPT to generate a chord
+// token string using the trained GPT checkpoint (out-CHORDv2).
+// Falls back to a hardcoded stub if the script or checkpoint is missing.
 package models
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -19,10 +23,36 @@ var (
 var knownSections = map[string]bool{
 	"intro": true, "verse": true, "prechorus": true, "chorus": true,
 	"bridge": true, "outro": true, "solo": true, "interlude": true,
+	"instrumental": true, "interlude2": true,
 }
 
-// genreChords provides a small set of genre-appropriate default progressions
-// used by the stub until sample_chords.py is integrated.
+// chordCheckpoint is the out-dir name (relative to nanoGPT/) for the model to load.
+const chordCheckpoint = "out-CHORDv2"
+
+// genreMap translates planner genre names to the chord model's trained vocabulary.
+// Unmapped genres fall back to "pop".
+var genreMap = map[string]string{
+	"pop":         "pop",
+	"rock":        "rock",
+	"blues":       "rock",
+	"folk":        "alternative",
+	"jazz":        "jazz",
+	"country":     "country",
+	"rnb":         "soul",
+	"soul":        "soul",
+	"metal":       "metal",
+	"hiphop":      "rap",
+	"hip-hop":     "rap",
+	"rap":         "rap",
+	"edm":         "electronic",
+	"electronic":  "electronic",
+	"punk":        "punk",
+	"reggae":      "reggae",
+	"alternative": "alternative",
+	"pop_rock":    "pop_rock",
+}
+
+// genreChords is used only by the stub fallback.
 var genreChords = map[string][4]string{
 	"pop":     {"C", "G", "Am", "F"},
 	"rock":    {"E", "A", "D", "B"},
@@ -36,14 +66,120 @@ var genreChords = map[string][4]string{
 	"edm":     {"Am", "F", "C", "G"},
 }
 
-// RunChordModel generates a SongSpec. Currently uses a stub that produces a
-// plausible token string from the PlannerDecision without calling sample_chords.py.
+// RunChordModel generates a SongSpec by running sample.py in chord-gen/nanoGPT.
+// Falls back to the stub when the script or checkpoint directory is absent.
 func RunChordModel(decision *schemas.PlannerDecision, scriptDir string) (*schemas.SongSpec, error) {
+	nanoGPTDir := filepath.Join(scriptDir, "chord-gen", "nanoGPT")
+	samplePy := filepath.Join(nanoGPTDir, "sample.py")
+	checkpointDir := filepath.Join(nanoGPTDir, chordCheckpoint)
+
+	if _, err := os.Stat(samplePy); os.IsNotExist(err) {
+		return runChordStub(decision)
+	}
+	if _, err := os.Stat(checkpointDir); os.IsNotExist(err) {
+		return runChordStub(decision)
+	}
+
+	tokenStr, err := callSamplePy(decision, nanoGPTDir)
+	if err != nil {
+		return nil, err
+	}
+	return parseTokenString(tokenStr, decision.TempoBPM, decision.Vibe), nil
+}
+
+func callSamplePy(decision *schemas.PlannerDecision, nanoGPTDir string) (string, error) {
+	mode := decision.Mode
+	if mode == "" {
+		mode = "generate"
+	}
+
+	args := []string{
+		"sample.py",
+		fmt.Sprintf("--out_dir=%s", chordCheckpoint),
+		fmt.Sprintf("--mode=%s", mode),
+		fmt.Sprintf("--genre=%s", mapGenre(decision.Genre)),
+		fmt.Sprintf("--decade=%d", clampDecade(decision.Decade)),
+		"--num_samples=1",
+		fmt.Sprintf("--device=%s", detectDevice()),
+	}
+	if decision.SeedChords != "" {
+		args = append(args, fmt.Sprintf("--seed_chords=%s", decision.SeedChords))
+	}
+	if decision.NextSection != "" {
+		args = append(args, fmt.Sprintf("--next_section=%s", decision.NextSection))
+	}
+
+	cmd := exec.Command("python3", args...)
+	cmd.Dir = nanoGPTDir
+	cmd.Stderr = os.Stderr
+
+	out, err := cmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return "", fmt.Errorf("sample.py exited %d", exitErr.ExitCode())
+		}
+		return "", fmt.Errorf("chord model subprocess: %w", err)
+	}
+
+	tokenStr := extractTokenString(string(out))
+	if tokenStr == "" {
+		return "", fmt.Errorf("no chord token string in sample.py output")
+	}
+	return tokenStr, nil
+}
+
+func mapGenre(genre string) string {
+	if mapped, ok := genreMap[strings.ToLower(strings.TrimSpace(genre))]; ok {
+		return mapped
+	}
+	return "pop"
+}
+
+func clampDecade(decade int) int {
+	d := (decade / 10) * 10
+	if d < 1950 {
+		return 1950
+	}
+	if d > 2020 {
+		return 2020
+	}
+	return d
+}
+
+func detectDevice() string {
+	if err := exec.Command("nvidia-smi").Run(); err == nil {
+		return "cuda"
+	}
+	return "cpu"
+}
+
+// extractTokenString parses sample.py stdout to find the generated token string.
+// sample.py prints "=== sample 1 ===" then the token string on the next non-empty line,
+// with <bos> stripped and <eos> replaced by "[end]".
+func extractTokenString(stdout string) string {
+	inSample := false
+	for _, line := range strings.Split(stdout, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "=== sample") {
+			inSample = true
+			continue
+		}
+		if inSample && line != "" {
+			// Strip "[end]" marker substituted for <eos> by sample.py
+			line = strings.TrimSpace(strings.ReplaceAll(line, "[end]", ""))
+			// Restore <bos> so parseTokenString gets a consistent format
+			return "<bos> " + line
+		}
+	}
+	return ""
+}
+
+// runChordStub returns a plausible progression without calling the Python model.
+func runChordStub(decision *schemas.PlannerDecision) (*schemas.SongSpec, error) {
 	chords, ok := genreChords[strings.ToLower(decision.Genre)]
 	if !ok {
 		chords = genreChords["pop"]
 	}
-
 	c := chords
 	tokenStr := fmt.Sprintf(
 		"<bos> <genre:%s> <decade:%d> <verse> %s %s %s %s <chorus> %s %s %s %s <bridge> %s %s %s %s <eos>",
@@ -52,18 +188,7 @@ func RunChordModel(decision *schemas.PlannerDecision, scriptDir string) (*schema
 		c[0], c[1], c[2], c[3],
 		c[2], c[3], c[0], c[1],
 	)
-
 	return parseTokenString(tokenStr, decision.TempoBPM, decision.Vibe), nil
-}
-
-// extractTokenString finds the chord token string in the subprocess stdout.
-func extractTokenString(stdout string) string {
-	for _, line := range strings.Split(stdout, "\n") {
-		if strings.Contains(line, "<bos>") || strings.Contains(line, "<genre:") {
-			return strings.TrimSpace(line)
-		}
-	}
-	return ""
 }
 
 // parseTokenString converts a chord token string into a SongSpec.
@@ -73,7 +198,6 @@ func parseTokenString(tokenStr string, tempoBPM int, vibe string) *schemas.SongS
 	genre := "pop"
 	decade := 2010
 	sections := make(map[string][]string)
-	// preserve insertion order via a slice
 	var sectionOrder []string
 	currentSection := ""
 
@@ -102,7 +226,7 @@ func parseTokenString(tokenStr string, tempoBPM int, vibe string) *schemas.SongS
 		}
 	}
 
-	_ = sectionOrder // available for ordered iteration if needed downstream
+	_ = sectionOrder
 
 	return &schemas.SongSpec{
 		Genre:     genre,
