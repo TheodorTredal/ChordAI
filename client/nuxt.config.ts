@@ -12,13 +12,18 @@ export default defineNuxtConfig({
   nitro: {
     devProxy: {
       '/api': {
-        target: 'http://c6-4:5555/api', // Sender nå til Go på GPU-noden
+        target: 'http://c6-4:5555/api',
         changeOrigin: true,
         prependPath: true
       },
       '/ws': {
-        target: 'http://c6-4:5555/ws',  // Sender nå til Go på GPU-noden
+        target: 'http://c6-4:5555/ws',
         ws: true,
+        changeOrigin: true,
+        prependPath: true
+      },
+      '/verify-chords': {
+        target: 'http://c6-4:8001/verify-chords',
         changeOrigin: true,
         prependPath: true
       }

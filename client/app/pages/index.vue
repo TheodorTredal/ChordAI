@@ -7,9 +7,15 @@ const config = useRuntimeConfig()
 const pingStatus = ref<'idle' | 'ok' | 'error'>('idle')
 const pingMessage = ref('')
 
+const chatInput = ref<{ append(text: string): void } | null>(null)
+
 function handleSubmit(text: string) {
   const input: PlannerInput = { freetext: text }
   generate(input)
+}
+
+function handleUseChords(chordText: string) {
+  chatInput.value?.append(chordText)
 }
 
 async function ping() {
@@ -29,8 +35,8 @@ async function ping() {
 
 <template>
   <div class="flex h-screen flex-col bg-zinc-900 text-zinc-100">
-    <!-- Header — constrained to max width -->
-    <header class="border-b border-zinc-800 px-6 py-4">
+    <!-- Header -->
+    <header class="border-b border-zinc-800 px-6 py-4 shrink-0">
       <div class="mx-auto flex max-w-3xl items-center gap-3">
         <span class="text-xl">🎵</span>
         <span class="text-lg font-semibold text-zinc-100">ChordAI</span>
@@ -48,23 +54,33 @@ async function ping() {
       </div>
     </header>
 
-    <!-- Message list — scrollable, fills remaining height -->
-    <main class="min-h-0 flex-1 overflow-y-auto">
-      <MessageList
-        :messages="messages"
-        :current-stage="currentStage"
-        :current-stage-status="currentStageStatus"
-      />
-    </main>
+    <!-- Two-column body -->
+    <div class="flex flex-1 min-h-0">
 
-    <!-- Input bar pinned to bottom, constrained to max width -->
-    <footer class="border-t border-zinc-800 px-6 py-6">
-      <div class="mx-auto max-w-3xl space-y-2">
-        <ChatInput :disabled="isGenerating" @submit="handleSubmit" />
-        <p class="text-center text-sm text-zinc-600">
-          Shift+Enter for new line · Enter to send
-        </p>
+      <!-- Chat column -->
+      <div class="flex flex-col flex-1 min-w-0">
+        <main class="min-h-0 flex-1 overflow-y-auto">
+          <MessageList
+            :messages="messages"
+            :current-stage="currentStage"
+            :current-stage-status="currentStageStatus"
+          />
+        </main>
+        <footer class="border-t border-zinc-800 px-6 py-6 shrink-0">
+          <div class="mx-auto max-w-3xl space-y-2">
+            <ChatInput ref="chatInput" :disabled="isGenerating" @submit="handleSubmit" />
+            <p class="text-center text-sm text-zinc-600">
+              Shift+Enter for new line · Enter to send
+            </p>
+          </div>
+        </footer>
       </div>
-    </footer>
+
+      <!-- Chord recorder sidebar -->
+      <aside class="w-72 shrink-0 border-l border-zinc-800">
+        <ChordRecorder @use-chords="handleUseChords" />
+      </aside>
+
+    </div>
   </div>
 </template>

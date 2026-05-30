@@ -17,6 +17,13 @@ function handleKeydown(e: KeyboardEvent) {
     handleSubmit()
   }
 }
+
+defineExpose({
+  append(extra: string) {
+    if (!extra) return
+    text.value = text.value ? `${text.value} ${extra}` : extra
+  },
+})
 </script>
 
 <template>
