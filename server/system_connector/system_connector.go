@@ -1,6 +1,7 @@
 // system_connector calls llama3.2 via the Ollama REST API to interpret user
-// input and produce a validated PlannerDecision. It is the AI routing layer
-// that sits between the client and the downstream chord/lyrics models.
+// input and produce a validated PlannerDecision. It uses Ollama's structured
+// output (format field with JSON Schema) so the model is constrained to always
+// produce valid JSON — no retry loop needed.
 package system_connector
 
 import (
@@ -17,16 +18,37 @@ import (
 )
 
 const (
-	ollamaURL   = "http://localhost:11434/api/chat"
+	ollamaURL    = "http://localhost:11434/api/chat"
 	plannerModel = "llama3.2"
 	temperature  = 0.3
 )
+
+// plannerSchema is the JSON Schema passed to Ollama's `format` field.
+// Ollama uses constrained decoding to guarantee the output matches this schema.
+// Must stay in sync with schemas.PlannerDecision and its json tags.
+var plannerSchema = json.RawMessage(`{
+  "type": "object",
+  "required": ["genre","decade","tempo_bpm","vibe","mode","seed_chords","next_section","pipeline","reasoning"],
+  "properties": {
+    "genre":        { "type": "string" },
+    "decade":       { "type": "integer", "minimum": 1950, "maximum": 2020 },
+    "tempo_bpm":    { "type": "integer", "minimum": 40,   "maximum": 200  },
+    "vibe":         { "type": "string" },
+    "mode":         { "type": "string", "enum": ["generate","extend","section"] },
+    "seed_chords":  { "type": "string" },
+    "next_section": { "type": "string" },
+    "pipeline":     { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "reasoning":    { "type": "string" }
+  },
+  "additionalProperties": false
+}`)
 
 // ollamaChatRequest is the payload sent to the Ollama /api/chat endpoint.
 type ollamaChatRequest struct {
 	Model    string          `json:"model"`
 	Messages []ollamaMessage `json:"messages"`
 	Stream   bool            `json:"stream"`
+	Format   json.RawMessage `json:"format"`
 	Options  ollamaOptions   `json:"options"`
 }
 
@@ -44,88 +66,24 @@ type ollamaChatResponse struct {
 }
 
 var systemPrompt = strings.TrimSpace(`
-You are an AI music planner. Your job is to interpret user input about a song they want to create and produce a structured plan for the downstream chord and lyrics generation models.
-
-You MUST respond with ONLY a valid JSON object matching this exact schema — no preamble, no explanation, no markdown fences:
-
-{
-  "genre": "<string: e.g. pop, rock, blues, folk, jazz, country, rnb, metal, hiphop, edm>",
-  "decade": <integer: 4-digit year like 1990 or 2010>,
-  "tempo_bpm": <integer: beats per minute, e.g. 88>,
-  "vibe": "<string: emotional description, e.g. melancholic and detached>",
-  "mode": "<string: one of generate | extend | section>",
-  "seed_chords": "<string: chord progression if mode is extend or section, else empty string>",
-  "next_section": "<string: section name if mode is section, else empty string>",
-  "pipeline": ["chord_model", "lyrics_model"],
-  "reasoning": "<string: brief explanation of your interpretation>"
-}
+You are an AI music planner. Interpret the user's song request and fill in every field of the required JSON schema.
 
 Rules:
-- If the user provides explicit structured values (genre, decade, etc.), use them as-is.
-- If any value is missing, infer it from the freetext description.
-- "mode" should be "generate" unless seed_chords are provided (then "extend") or a next_section is specified (then "section").
-- "pipeline" should always be ["chord_model", "lyrics_model"] unless the user explicitly asks for chords only (then ["chord_model"]) or lyrics only (then ["lyrics_model"]).
-- "tempo_bpm" must be an integer between 40 and 200.
-- "decade" must be a multiple of 10 between 1950 and 2020.
-- The "reasoning" field is for your internal notes — it will not be shown to the user.
+- Use any explicit values the user provides (genre, decade, etc.) as-is.
+- Infer missing values from the freetext description.
+- "mode" must be "generate" unless seed_chords are provided (then "extend") or a next_section is specified (then "section").
+- CRITICAL: If "Seed chords (played by user)" are provided, copy them EXACTLY as-is into the "seed_chords" field. Do not rephrase, reorder, or drop any chord. The chord model requires the exact sequence the user played.
+- "pipeline" must always include "chord_model". Add "lyrics_model" unless the user explicitly asks for chords only. Add "image_model" only if the user asks for an image or album cover.
+- "tempo_bpm" must be between 40 and 200.
+- "decade" must be a multiple of 10, clamped to 1950–2020.
+- "reasoning" is for your internal notes and will not be shown to the user.
 `)
 
 // Plan interprets a PlannerInput using llama3.2 and returns a PlannerDecision.
-// It retries once with a correction prompt if JSON parsing fails.
+// Ollama's constrained JSON output guarantees valid JSON — no retry needed.
 func Plan(input schemas.PlannerInput) (*schemas.PlannerDecision, error) {
 	userMsg := buildUserMessage(input)
 
-	decision, err := callOllama(userMsg)
-	if err != nil {
-		// Retry once with an explicit correction prompt
-		log.Printf("[system_connector] first attempt failed (%v), retrying with correction prompt", err)
-		correctionMsg := fmt.Sprintf(
-			"Your previous response could not be parsed as valid JSON. %v\n\nRespond with ONLY a valid JSON object matching the schema. No preamble.",
-			err,
-		)
-		decision, err = callOllama(correctionMsg)
-		if err != nil {
-			return nil, fmt.Errorf("system_connector: both attempts failed: %w", err)
-		}
-	}
-
-	log.Printf("[system_connector] reasoning: %s", decision.Reasoning)
-	return decision, nil
-}
-
-func buildUserMessage(input schemas.PlannerInput) string {
-	var b strings.Builder
-	b.WriteString("Plan a song with the following parameters:\n\n")
-
-	if input.Freetext != "" {
-		fmt.Fprintf(&b, "Description: %s\n", input.Freetext)
-	}
-	if input.Genre != nil {
-		fmt.Fprintf(&b, "Genre: %s\n", *input.Genre)
-	}
-	if input.Decade != nil {
-		fmt.Fprintf(&b, "Decade: %d\n", *input.Decade)
-	}
-	if input.TempoBPM != nil {
-		fmt.Fprintf(&b, "Tempo BPM: %d\n", *input.TempoBPM)
-	}
-	if input.Vibe != nil {
-		fmt.Fprintf(&b, "Vibe: %s\n", *input.Vibe)
-	}
-	if input.Mode != nil {
-		fmt.Fprintf(&b, "Mode: %s\n", *input.Mode)
-	}
-	if input.SeedChords != "" {
-		fmt.Fprintf(&b, "Seed chords: %s\n", input.SeedChords)
-	}
-	if input.NextSection != "" {
-		fmt.Fprintf(&b, "Next section: %s\n", input.NextSection)
-	}
-
-	return b.String()
-}
-
-func callOllama(userMsg string) (*schemas.PlannerDecision, error) {
 	reqBody := ollamaChatRequest{
 		Model: plannerModel,
 		Messages: []ollamaMessage{
@@ -133,6 +91,7 @@ func callOllama(userMsg string) (*schemas.PlannerDecision, error) {
 			{Role: "user", Content: userMsg},
 		},
 		Stream:  false,
+		Format:  plannerSchema,
 		Options: ollamaOptions{Temperature: temperature},
 	}
 
@@ -158,29 +117,44 @@ func callOllama(userMsg string) (*schemas.PlannerDecision, error) {
 		return nil, fmt.Errorf("decode ollama response: %w", err)
 	}
 
-	raw := strings.TrimSpace(ollamaResp.Message.Content)
-
-	// Strip markdown code fences if the model added them despite instructions
-	raw = stripCodeFences(raw)
-
 	var decision schemas.PlannerDecision
-	if err := json.Unmarshal([]byte(raw), &decision); err != nil {
-		return nil, fmt.Errorf("parse JSON from model output (%q): %w", truncate(raw, 200), err)
+	if err := json.Unmarshal([]byte(ollamaResp.Message.Content), &decision); err != nil {
+		return nil, fmt.Errorf("parse planner JSON: %w", err)
 	}
 
+	log.Printf("[system_connector] pipeline=%v reasoning=%s", decision.Pipeline, decision.Reasoning)
 	return &decision, nil
 }
 
-func stripCodeFences(s string) string {
-	s = strings.TrimPrefix(s, "```json")
-	s = strings.TrimPrefix(s, "```")
-	s = strings.TrimSuffix(s, "```")
-	return strings.TrimSpace(s)
-}
+func buildUserMessage(input schemas.PlannerInput) string {
+	var b strings.Builder
+	b.WriteString("Plan a song with the following parameters:\n\n")
 
-func truncate(s string, n int) string {
-	if len(s) <= n {
-		return s
+	if input.Freetext != "" {
+		fmt.Fprintf(&b, "Description: %s\n", input.Freetext)
 	}
-	return s[:n] + "..."
+	if input.Genre != nil {
+		fmt.Fprintf(&b, "Genre: %s\n", *input.Genre)
+	}
+	if input.Decade != nil {
+		fmt.Fprintf(&b, "Decade: %d\n", *input.Decade)
+	}
+	if input.TempoBPM != nil {
+		fmt.Fprintf(&b, "Tempo BPM: %d\n", *input.TempoBPM)
+	}
+	if input.Vibe != nil {
+		fmt.Fprintf(&b, "Vibe: %s\n", *input.Vibe)
+	}
+	if input.Mode != nil {
+		fmt.Fprintf(&b, "Mode: %s\n", *input.Mode)
+	}
+	if input.SeedChords != "" {
+		fmt.Fprintf(&b, "Seed chords (played by user): %s\n", input.SeedChords)
+		fmt.Fprintf(&b, "IMPORTANT: Copy these chords exactly into seed_chords — do not change them.\n")
+	}
+	if input.NextSection != "" {
+		fmt.Fprintf(&b, "Next section: %s\n", input.NextSection)
+	}
+
+	return b.String()
 }

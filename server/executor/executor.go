@@ -6,10 +6,18 @@ package executor
 import (
     "fmt"
     "log"
+    "path/filepath"
+    "strings"
 
     "chordai/server/models"
     "chordai/server/schemas"
 )
+
+var validStages = map[string]bool{
+    "chord_model":  true,
+    "lyrics_model": true,
+    "image_model":  true,
+}
 
 // EventCallback receives WebSocket events as the pipeline runs.
 // Returning an error cancels execution.
@@ -27,9 +35,16 @@ func Run(decision *schemas.PlannerDecision, scriptDir string, onEvent EventCallb
         }
     }
 
+    // Validate all stage names before running anything.
+    for _, stage := range decision.Pipeline {
+        if !validStages[stage] {
+            return nil, fmt.Errorf("unknown pipeline stage %q — valid stages: chord_model, lyrics_model, image_model", stage)
+        }
+    }
+
     var spec *schemas.SongSpec
     var lyrics string
-    var imagePath string // <-- Ny lokal variabel for å holde på stien til det genererte bildet
+    var imagePath string
 
     for _, stage := range decision.Pipeline {
         switch stage {
@@ -57,30 +72,25 @@ func Run(decision *schemas.PlannerDecision, scriptDir string, onEvent EventCallb
             }
             emit(schemas.WSEvent{Stage: stage, Status: "done"})
 
-        // --- HER ER DEN NYE STAGE-EN FOR BILDEGENERERING ---
         case "image_model":
             emit(schemas.WSEvent{Stage: stage, Status: "running"})
-
-            // Vi bygger en dynamisk prompt basert på hva Llama-planleggeren fant ut om sangen.
-            // Du kan justere denne strengen akkurat slik du vil for å få best stil!
             prompt := fmt.Sprintf(
-                "A nostalgic %s album cover from the %ds, %s vibe, retro aesthetic, digital art, high quality", 
-                decision.Genre, 
-                decision.Decade, 
+                "A %s album cover from the %ds, %s vibe, retro aesthetic, digital art, high quality",
+                decision.Genre,
+                decision.Decade,
                 decision.Vibe,
             )
-
-            var err2 error
-            // Vi kaller funksjonen fra den nye models/image_runner.go filen
-            imagePath, err2 = models.RunImageModel(prompt, scriptDir)
-            if err2 != nil {
-                emit(schemas.WSEvent{Stage: stage, Status: "error", Error: err2.Error()})
-                return nil, fmt.Errorf("image_model: %w", err2)
+            var err error
+            imagePath, err = models.RunImageModel(prompt, scriptDir)
+            if err != nil {
+                emit(schemas.WSEvent{Stage: stage, Status: "error", Error: err.Error()})
+                return nil, fmt.Errorf("image_model: %w", err)
             }
             emit(schemas.WSEvent{Stage: stage, Status: "done"})
 
         default:
-            log.Printf("[executor] unknown pipeline stage %q — skipping", stage)
+            // unreachable after upfront validation above
+            return nil, fmt.Errorf("unexpected pipeline stage %q", stage)
         }
     }
 
@@ -88,7 +98,6 @@ func Run(decision *schemas.PlannerDecision, scriptDir string, onEvent EventCallb
         return nil, fmt.Errorf("pipeline produced no SongSpec — was chord_model included?")
     }
 
-    // Vi returnerer det fulle resultatet der det nye bildet er bakt inn
     return &schemas.SongResult{
         Genre:     spec.Genre,
         Decade:    spec.Decade,
@@ -97,6 +106,22 @@ func Run(decision *schemas.PlannerDecision, scriptDir string, onEvent EventCallb
         Sections:  spec.Sections,
         RawTokens: spec.RawTokens,
         Lyrics:    lyrics,
-        ImagePath: imagePath, // <-- Sørg for at dette feltet er lagt til i schemas.SongResult
+        ImagePath: imageURL(imagePath, scriptDir),
     }, nil
+}
+
+// imageURL converts an absolute filesystem path produced by image_generator.py
+// into a relative URL served by the Go static file handler at /api/out-chords/.
+// If the path isn't under scriptDir/out-chords, it is returned unchanged so
+// debugging is still possible.
+func imageURL(absPath string, scriptDir string) string {
+    if absPath == "" {
+        return ""
+    }
+    outDir := filepath.Join(scriptDir, "out-chords")
+    rel, err := filepath.Rel(outDir, absPath)
+    if err != nil || strings.HasPrefix(rel, "..") {
+        return absPath
+    }
+    return "/api/out-chords/" + filepath.ToSlash(rel)
 }

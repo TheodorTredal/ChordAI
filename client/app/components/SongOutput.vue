@@ -90,5 +90,14 @@ function sectionColor(label: string): string {
 
     <!-- Fallback: raw lyrics if parsing produced nothing -->
     <pre v-else class="whitespace-pre-wrap font-sans text-base text-zinc-200 leading-relaxed">{{ result.lyrics }}</pre>
+
+    <!-- Album art -->
+    <div v-if="result.image_path" class="mt-4">
+      <img
+        :src="result.image_path"
+        :alt="`${result.genre} album cover`"
+        class="rounded-xl w-full max-w-sm object-cover shadow-lg shadow-black/50"
+      />
+    </div>
   </div>
 </template>

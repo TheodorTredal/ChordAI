@@ -39,14 +39,13 @@ import os
 import re
 import subprocess
 import sys
-from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
 try:
     import ollama
 except ImportError:
-    print("Missing dependency. Run:  pip install ollama rich")
+    print("Missing dependency. Run:  pip install ollama rich pydantic")
     sys.exit(1)
 
 try:
@@ -55,41 +54,17 @@ try:
     from rich.rule import Rule
     from rich.text import Text
 except ImportError:
-    print("Missing dependency. Run:  pip install ollama rich")
+    print("Missing dependency. Run:  pip install ollama rich pydantic")
     sys.exit(1)
 
-console = Console()
+# Import shared schemas — same field names as Go server/schemas/schemas.go
+sys.path.insert(0, str(Path(__file__).parent))
+from schemas import SongSpec
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Data model
-# ─────────────────────────────────────────────────────────────────────────────
+# Rich console writes to stderr so stdout stays clean for machine-readable output
+console = Console(stderr=True)
 
 KNOWN_SECTIONS = ["intro", "verse", "prechorus", "chorus", "bridge", "outro", "solo", "interlude"]
-
-@dataclass
-class SongSpec:
-    """Structured representation shared between the chord model and lyrics model."""
-    genre:        str
-    decade:       int
-    tempo_bpm:    int
-    vibe:         str
-    sections:     dict[str, list[str]] = field(default_factory=dict)   # e.g. {"verse": ["F","C","G"], ...}
-    raw_tokens:   str = ""
-
-    @property
-    def all_chords(self) -> list[str]:
-        """Flat list of all unique chords across all sections."""
-        seen, out = set(), []
-        for chords in self.sections.values():
-            for c in chords:
-                if c not in seen:
-                    seen.add(c)
-                    out.append(c)
-        return out
-
-    @property
-    def structure_label(self) -> str:
-        return " / ".join(s.capitalize() for s in self.sections)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -145,7 +120,7 @@ def parse_chord_token_string(token_str: str, tempo_bpm: int, vibe: str) -> SongS
         vibe=vibe,
         sections=sections,
         raw_tokens=token_str.strip(),
-    )
+    )  # type: ignore[call-arg]  # Pydantic accepts kwargs
 
 
 def load_latest_token_file(out_dir: str) -> str:
@@ -371,14 +346,14 @@ def generate_lyrics(spec: SongSpec, model: str, temperature: float, top_p: float
 # ─────────────────────────────────────────────────────────────────────────────
 
 def save_output(spec: SongSpec, lyrics: str, out_dir: str) -> Path:
-    """Save lyrics + metadata JSON to out_dir."""
+    """Save lyrics + metadata JSON to out_dir and return the JSON path."""
     p = Path(out_dir)
     p.mkdir(parents=True, exist_ok=True)
 
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     base  = p / f"lyrics_{spec.genre}_{spec.decade}_{stamp}"
 
-    # Plain text
+    # Plain text (human-readable copy)
     txt_path = base.with_suffix(".txt")
     with open(txt_path, "w", encoding="utf-8") as f:
         f.write(f"Genre  : {spec.genre.upper()}\n")
@@ -389,20 +364,20 @@ def save_output(spec: SongSpec, lyrics: str, out_dir: str) -> Path:
         f.write("─" * 50 + "\n\n")
         f.write(lyrics)
 
-    # Metadata JSON (for downstream pipeline consumers)
+    # Metadata JSON — read by Go server via stdout path (see main())
     meta_path = base.with_suffix(".json")
     with open(meta_path, "w", encoding="utf-8") as f:
         json.dump({
-            "genre":     spec.genre,
-            "decade":    spec.decade,
-            "tempo_bpm": spec.tempo_bpm,
-            "vibe":      spec.vibe,
-            "sections":  spec.sections,
+            "genre":      spec.genre,
+            "decade":     spec.decade,
+            "tempo_bpm":  spec.tempo_bpm,
+            "vibe":       spec.vibe,
+            "sections":   spec.sections,
             "raw_tokens": spec.raw_tokens,
-            "lyrics":    lyrics,
+            "lyrics":     lyrics,
         }, f, indent=2)
 
-    return txt_path
+    return meta_path
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -510,9 +485,11 @@ def main() -> None:
     # ── Step 5: save ─────────────────────────────────────────────────────────
     if not args.no_save:
         saved = save_output(spec, lyrics, args.out_dir)
-        console.print(f"\n[green]✓ Saved:[/green] {saved}  [dim](+ .json metadata)[/dim]")
+        console.print(f"\n[green]✓ Saved:[/green] {saved}  [dim](+ .txt copy)[/dim]", file=sys.stderr)
+        # Print the JSON path to stdout as the last line — Go server reads this.
+        print(str(saved), flush=True)
 
-    console.print("\n[bold green]✓ Done![/bold green]")
+    console.print("\n[bold green]✓ Done![/bold green]", file=sys.stderr)
 
 
 if __name__ == "__main__":

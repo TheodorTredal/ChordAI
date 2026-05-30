@@ -89,10 +89,3 @@ def parse_dual_channel_response(raw_response: str) -> Dict[str, Any]:
         raise ValueError("`chord_data` must be an array of strings.")
 
     return {"speech_text": speech_text, "chord_data": chord_data}
-def orchestrate(payload):
-    # Placeholder logic for endpoint test
-    print(f"[agent_orchestrator] Received payload: {payload}")
-    return {
-        "speech_text": "This is the speech output from Claude.",
-        "chord_data": ["Fmaj7", "Em7", "Dm7", "G7"]
-    }
