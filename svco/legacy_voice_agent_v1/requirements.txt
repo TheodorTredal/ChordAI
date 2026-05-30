@@ -1,0 +1,10 @@
+# Legacy Voice Ingestion and Processing
+torch
+
+# Agent Orchestration & Protocol
+anthropic
+mcp
+
+# Output Synthesis and Local TTS
+kokoro
+sounddevice

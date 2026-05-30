@@ -1,22 +1,12 @@
-# Core Audio Ingestion and Processing
+# Core Audio Processing
 numpy
-torch
 librosa
 soundfile
 
 # Deep Learning Chord Recognition
-# Note: Requires manual ordering (numpy & cython must be installed prior to madmom)
 cython
 mido
 git+https://github.com/CPJKU/madmom.git
-
-# Agent Orchestration & Protocol
-anthropic
-mcp
-
-# Output Synthesis and Local TTS
-kokoro
-sounddevice
 
 # API Server Layer
 fastapi
