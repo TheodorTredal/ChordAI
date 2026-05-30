@@ -72,7 +72,7 @@ You will need three terminals for this
 ### Terminal 1: SSH-tunnel & Frontend
 
 #### 1. Log into the cluster with port-forwarding from your Mac
-ssh -L 8000:localhost:3000 brukernavn@ificluster.its.uit.no
+ssh -L 8000:localhost:3000 brukernavn@ificluster.ifi.uit.no
 
 #### 2. Navigate to the frontend folder:
 cd ChordAI/client
