@@ -3,24 +3,58 @@ import type { SongResult } from '~/types'
 
 const props = defineProps<{ result: SongResult }>()
 
+// 1. Hent ut runtime config for å få tak i Go-serverens URL (f.eks. http://localhost:8000)
+const config = useRuntimeConfig()
+
+// 2. Lag en computed variabel som lager den fulle URL-en til bildet hvis image_path eksisterer.
+// Hvis Go-rutene dine ligger under en `/api`-gruppe (f.eks rg := r.Group("/api")), 
+// må du legge til `/api/` i strengen under: `${config.public.serverUrl}/api/${props.result.image_path}`
+// const albumCoverUrl = computed(() => {
+//   if (!props.result.image_path) return null
+//   return `${config.public.serverUrl}/${props.result.image_path}`
+// })
+
+// const albumCoverUrl = computed(() => {
+//   if (!props.result.image_path) return null
+
+//   // Sørger for at vi ikke får doble skråstreker hvis serverUrl slutter på /
+//   const baseUrl = config.public.serverUrl.replace(/\/$/, '')
+
+//   // HER definerer du mappen bildet faktisk ligger i på serveren.
+//   // Hvis du må gå inn i "api/out-chords", blir det slik:
+//   // return `${baseUrl}/ChordAI/out-chords/${props.result.image_path}`
+//   // return '/image_1780061810.png'
+//   // return `../../out-chords/${props.result.image_path}`
+//   // return `../../out-chords/${props.result.image_path}`
+//   // return `../../out-chords/`
+//   return `/../../out-chords/image_1780165532.png`
+// })
+
+const albumCoverUrl = computed(() => {
+  if (!props.result.image_path) return null
+  
+  // Siden backenden sender hele bildet som "data:image/png;base64,...",
+  // dytter vi den bare rett inn i <img> taggen!
+  return props.result.image_path
+})
+// ChordAI/out-chords/image_1780061810.png
+
 interface ParsedSection {
-  label: string   // e.g. "Verse 1"
-  chords: string  // e.g. "E A D B"
-  body: string    // lyrics lines only
+  label: string   
+  chords: string  
+  body: string    
 }
 
 const sections = computed<ParsedSection[]>(() => {
   const raw = props.result.lyrics
+  if (!raw) return [] // Sikring mot tom tekst
   const blocks = raw.split(/\n(?=\[)/).filter(b => b.trim())
 
   return blocks.map(block => {
     const lines = block.split('\n')
-
-    // First line is the section label: [Verse 1]
     const labelLine = lines[0].trim()
     const label = labelLine.replace(/^\[|\]$/g, '')
 
-    // Find and extract a (Chords: ...) line anywhere in the block
     let chords = ''
     const bodyLines = lines.slice(1).filter(line => {
       const m = line.trim().match(/^\(Chords?:\s*(.+?)\)$/i)
@@ -28,9 +62,8 @@ const sections = computed<ParsedSection[]>(() => {
       return true
     })
 
-    // If no explicit chord line, fall back to the sections map from the result
     if (!chords) {
-      const key = label.toLowerCase().replace(/\s+\d+$/, '') // "verse 1" → "verse"
+      const key = label.toLowerCase().replace(/\s+\d+$/, '') 
       const fromSpec = props.result.sections[key]
       if (fromSpec?.length) chords = fromSpec.join(' ')
     }
@@ -54,7 +87,16 @@ function sectionColor(label: string): string {
 
 <template>
   <div class="space-y-5">
-    <!-- Song metadata pills -->
+    
+    <div v-if="albumCoverUrl" class="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 p-3 max-w-sm mx-auto md:mx-0">
+      <div class="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">Generert Albumcover</div>
+      <img 
+        :src="albumCoverUrl" 
+        alt="AI-generert albumcover" 
+        class="h-auto w-full rounded-lg object-cover aspect-square border border-zinc-800 shadow-lg"
+      />
+    </div>
+
     <div class="flex flex-wrap gap-2 text-xs">
       <span class="rounded-full bg-zinc-700 px-3 py-1 text-zinc-300 font-medium uppercase tracking-wide">{{ result.genre }}</span>
       <span class="rounded-full bg-zinc-700 px-3 py-1 text-zinc-300">{{ result.decade }}s</span>
@@ -62,7 +104,6 @@ function sectionColor(label: string): string {
       <span class="rounded-full bg-zinc-700 px-3 py-1 text-zinc-300 italic">{{ result.vibe }}</span>
     </div>
 
-    <!-- Section chord pills -->
     <div v-if="Object.keys(result.sections).length" class="flex flex-wrap gap-2">
       <div
         v-for="(chords, section) in result.sections"
@@ -75,20 +116,16 @@ function sectionColor(label: string): string {
       </div>
     </div>
 
-    <!-- Parsed sections -->
     <div v-if="sections.length" class="space-y-6">
       <div v-for="section in sections" :key="section.label" class="space-y-1">
-        <!-- Section header: "Verse 1 — E A D B" -->
         <div class="flex items-baseline gap-2 border-l-2 pl-3" :class="sectionColor(section.label)">
           <span class="font-semibold text-base">{{ section.label }}</span>
           <span v-if="section.chords" class="text-sm font-mono opacity-60">{{ section.chords }}</span>
         </div>
-        <!-- Lyrics body -->
         <pre class="whitespace-pre-wrap font-sans text-base text-zinc-200 leading-relaxed pl-3">{{ section.body }}</pre>
       </div>
     </div>
 
-    <!-- Fallback: raw lyrics if parsing produced nothing -->
     <pre v-else class="whitespace-pre-wrap font-sans text-base text-zinc-200 leading-relaxed">{{ result.lyrics }}</pre>
   </div>
 </template>

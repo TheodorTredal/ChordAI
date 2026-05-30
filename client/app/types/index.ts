@@ -17,6 +17,7 @@ export interface SongResult {
   sections: Record<string, readonly string[]>
   raw_tokens: string
   lyrics: string
+  image_path?: string
 }
 
 export type PipelineStage = 'planner' | 'chord_model' | 'lyrics_model' | 'result' | 'pipeline' | 'input'
