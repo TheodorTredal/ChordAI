@@ -1,10 +1,24 @@
-pyaudio
-torch
-whisper
-soundfile
-librosa
-sounddevice
+# Core Audio Ingestion and Processing
 numpy
-typing_extensions
-torchaudio
-# If needed: the actual MCP Python SDK, Kokoro-82M, and KPipeline (update as appropriate)
+torch
+librosa
+soundfile
+
+# Deep Learning Chord Recognition
+# Note: Requires manual ordering (numpy & cython must be installed prior to madmom)
+cython
+mido
+git+https://github.com/CPJKU/madmom.git
+
+# Agent Orchestration & Protocol
+anthropic
+mcp
+
+# Output Synthesis and Local TTS
+kokoro
+sounddevice
+
+# API Server Layer
+fastapi
+uvicorn
+python-multipart
