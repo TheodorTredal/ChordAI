@@ -8,7 +8,7 @@ soundfile
 # Note: Requires manual ordering (numpy & cython must be installed prior to madmom)
 cython
 mido
-git+https://github.com/CPJKU/madmom.git
+pip install git+https://github.com/CPJKU/madmom.git
 
 # Agent Orchestration & Protocol
 anthropic
