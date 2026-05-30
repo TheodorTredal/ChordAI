@@ -4,10 +4,12 @@
 package routers
 
 import (
+    "encoding/base64" // <-- NY: Trengs for å kode bildet
     "encoding/json"
     "log"
     "net/http"
-    "path/filepath" // <-- Husk å legge til denne pakken for filstier
+    "os"              // <-- NY: Trengs for å lese filen fra disk
+    "path/filepath"
 
     "github.com/gin-gonic/gin"
     "github.com/gorilla/websocket"
@@ -21,25 +23,30 @@ var upgrader = websocket.Upgrader{
     CheckOrigin: func(r *http.Request) bool { return true }, // CORS handled by Gin middleware
 }
 
+// Hjelpefunksjon som leser et bilde fra disk og gjør det om til en Base64 Data URL streng
+func fileToBase64(filePath string) (string, error) {
+    bytes, err := os.ReadFile(filePath)
+    if err != nil {
+        return "", err
+    }
+    base64Str := base64.StdEncoding.EncodeToString(bytes)
+    return "data:image/png;base64," + base64Str, nil
+}
+
 // RegisterAPIRoutes mounts the REST endpoint under the given group.
-// Resulting path: POST {group}/generate
 func RegisterAPIRoutes(rg *gin.RouterGroup, scriptDir string) {
     rg.POST("/generate", restGenerate(scriptDir))
     
-    // --- VIKTIG: GJØR BILDEMAPPEN STATISK TILGJENGELIG ---
-    // Dette gjør at hvis et bilde ligger på "out-chords/image_123.png", 
-    // kan Vue laste det inn fra "http://localhost:8000/api/out-chords/image_123.png"
+    // Trengs egentlig ikke lenger siden bildet sendes i JSON, men greit å la stå
     rg.Static("/out-chords", filepath.Join(scriptDir, "out-chords"))
 }
 
 // RegisterWSRoutes mounts the WebSocket endpoint under the given group.
-// Resulting path: GET {group}/generate
 func RegisterWSRoutes(rg *gin.RouterGroup, scriptDir string) {
     rg.GET("/generate", wsGenerate(scriptDir))
 }
 
 // restGenerate — POST /api/generate
-// Blocks until the full song is ready, then returns JSON.
 func restGenerate(scriptDir string) gin.HandlerFunc {
     return func(c *gin.Context) {
         var input schemas.PlannerInput
@@ -55,9 +62,6 @@ func restGenerate(scriptDir string) gin.HandlerFunc {
             return
         }
 
-        // --- UTVIKLINGSTRIKS (Valgfritt) ---
-        // Hvis Llama-modellen (system_connector) ikke har lært å legge til "image_model" i listen enda,
-        // kan du tvinge den inn her under testing ved å avkommentere linjen under:
         decision.Pipeline = append(decision.Pipeline, "image_model")
 
         result, err := executor.Run(decision, scriptDir, nil)
@@ -65,6 +69,16 @@ func restGenerate(scriptDir string) gin.HandlerFunc {
             log.Printf("[generate] executor error: %v", err)
             c.JSON(http.StatusInternalServerError, gin.H{"error": "pipeline failed: " + err.Error()})
             return
+        }
+
+        // --- ENDRING HER: Konverter bildet til rådata FØR vi sletter den fulle stien ---
+        if result.ImagePath != "" {
+            base64Img, err := fileToBase64(result.ImagePath)
+            if err != nil {
+                log.Printf("[generate] feil ved konvertering av bilde: %v", err)
+            } else {
+                result.ImagePath = base64Img // Nå inneholder ImagePath hele bildet!
+            }
         }
 
         c.JSON(http.StatusOK, result)
@@ -93,7 +107,6 @@ func wsGenerate(scriptDir string) gin.HandlerFunc {
             return
         }
 
-        // Planner stage
         sendWSEvent(conn, schemas.WSEvent{Stage: "planner", Status: "running"})
         decision, err := system_connector.Plan(input)
         if err != nil {
@@ -102,11 +115,8 @@ func wsGenerate(scriptDir string) gin.HandlerFunc {
         }
         sendWSEvent(conn, schemas.WSEvent{Stage: "planner", Status: "done"})
 
-        // --- UTVIKLINGSTRIKS FOR WEBSOCKET (Valgfritt) ---
-        // Samme her, avkommenter denne for å tvinge bildegenerering i testen over WS:
         decision.Pipeline = append(decision.Pipeline, "image_model")
 
-        // Pipeline execution — emit each stage event over the WebSocket.
         onEvent := func(event schemas.WSEvent) error {
             return sendWSEvent(conn, event)
         }
@@ -115,6 +125,16 @@ func wsGenerate(scriptDir string) gin.HandlerFunc {
         if err != nil {
             sendWSEvent(conn, schemas.WSEvent{Stage: "pipeline", Status: "error", Error: err.Error()})
             return
+        }
+
+        // --- ENDRING HER OGSÅ FOR WEBSOCKET ---
+        if result.ImagePath != "" {
+            base64Img, err := fileToBase64(result.ImagePath)
+            if err != nil {
+                log.Printf("[ws/generate] feil ved konvertering av bilde: %v", err)
+            } else {
+                result.ImagePath = base64Img
+            }
         }
 
         resultBytes, _ := json.Marshal(result)
