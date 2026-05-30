@@ -16,13 +16,12 @@ ps. If you want to change the GPU from c6-4 node go to "nuxt.config.ts"
 
 ### Install ollama localy:
     1. ssh c6-4
-    2. cd into ChordAI
-    3. mkdir -p local_ollama && cd local_ollama
-    4. Download and unpack the official Linux-binary:
+    2. mkdir -p local_ollama && cd local_ollama
+    3. Download and unpack the official Linux-binary:
         curl -fsSL https://ollama.com/download/ollama-linux-amd64.tar.zst | tar --zstd -xvf -
-    5. Add the binary to the PATH (run this, or add it to ~/.bashrc for permanent tilgang):
+    4. Add the binary to the PATH (run this, or add it to ~/.bashrc for permanent tilgang):
         export PATH=$HOME/local_ollama/bin:$PATH
-    6. Downlaod the models:
+    5. Downlaod the models:
         ollama pull llama3.2
         ollama pull gemma4
 
