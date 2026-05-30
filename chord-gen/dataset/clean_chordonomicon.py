@@ -42,7 +42,7 @@ import re
 import sys
 from collections import Counter
 from pathlib import Path
-
+from typing import Optional
 import pandas as pd
 
 
@@ -80,7 +80,7 @@ BASE_SPECIAL_TOKENS = [PAD_TOKEN, BOS_TOKEN, EOS_TOKEN, UNK_TOKEN]
 # Tag + chord parsing
 # ----------------------------------------------------------------------------- 
 
-def normalize_tag(raw_section: str) -> str | None:
+def normalize_tag(raw_section: str) -> Optional[str]:
     """Map a raw captured section name to a canonical section, or None to drop.
 
     'verse' -> 'verse'      (already canonical)
