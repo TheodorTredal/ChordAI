@@ -1,19 +1,22 @@
+# Running ChordAI on the UiT IFI cluster
 
-This document describes how to set up, route and run ChordAI (nuxt-frontend, GO-backend and Ollama/gemma), 
-across the clusters entry node c0-0 and the GPU node c6-4
+The cluster has no internet-facing GPU nodes, so the stack is split:
 
+| Where | What runs |
+|-------|-----------|
+| **c6-4** (GPU node) | Go server, Ollama, Python models (chord/lyrics/image) |
+| **c0-0** (entry node) | Nuxt frontend |
+| **Your laptop** | Browser, optionally SVCO voice pipeline |
 
-## Architecture 
-Since heavy language models needs a decent GPU, is the system split up into three parts
-1. Your Local computer
-2. The cluster entry node (c0-0): Runs Nuxt-frontend and forwards GPU traffic
-3. GPU-node (C6-4): Runs the GO backend, Python scripts and local Ollama.  
+Traffic flows: `browser → SSH tunnel → c0-0:3000 (Nuxt) → c6-4:5555 (Go)`
 
-ps. If you want to change the GPU from c6-4 node go to "nuxt.config.ts"
+---
 
+## One-time setup
 
-## One Time Preperations
+### On c6-4 — install Ollama
 
+<<<<<<< Updated upstream
 ### Install ollama localy:
     1. ssh c6-4
     2. mkdir -p local_ollama && cd local_ollama
@@ -88,28 +91,105 @@ Ollama needs to run in the background on the GPU node to enable the LLM
 
 # 1. Log into the GPU node:
 ssh brukernavn@ificluster.its.uit.no
+=======
+```bash
+ssh <username>@ificluster.its.uit.no
+>>>>>>> Stashed changes
 ssh c6-4
+cd ~/INF-3600/ChordAI
+mkdir -p local_ollama && cd local_ollama
+curl -fsSL https://ollama.com/download/ollama-linux-amd64.tar.zst | tar --zstd -xvf -
+export PATH=$HOME/local_ollama/bin:$PATH   # add to ~/.bashrc to make permanent
+cd ..
+ollama pull llama3.2
+ollama pull gemma4
+```
 
-# 2. make sure that the terminal has Ollama in PATH
+### On c6-4 — Python dependencies
+
+```bash
+pip install -r models/requirements.txt
+```
+
+### On c0-0 — Node dependencies
+
+```bash
+ssh <username>@ificluster.its.uit.no
+cd ~/INF-3600/ChordAI/client
+npm install
+```
+
+### Chord model checkpoint
+
+Train once on c6-4 (requires GPU, ~30 min):
+
+```bash
+cd ~/INF-3600/ChordAI/chord-gen
+make setup && make data && make train
+```
+
+Without a checkpoint the server uses a rule-based fallback and the rest of the stack still works.
+
+---
+
+## Starting up (3 terminals)
+
+### Terminal 1 — SSH tunnel + Nuxt frontend (on c0-0)
+
+```bash
+# From your laptop — open tunnel: local port 3000 → c0-0 port 3000
+ssh -L 3000:localhost:3000 <username>@ificluster.its.uit.no
+
+# Now on c0-0:
+cd ~/INF-3600/ChordAI/client
+CHORDAI_BACKEND_URL=http://c6-4:5555 npm run dev -- --host 0.0.0.0
+```
+
+Open http://localhost:3000 in your browser.
+
+### Terminal 2 — Ollama (on c6-4)
+
+```bash
+ssh <username>@ificluster.its.uit.no && ssh c6-4
 export PATH=$HOME/local_ollama/bin:$PATH
-
-# 3. Start the LLM engine:
 ollama serve
+```
 
+### Terminal 3 — Go server (on c6-4)
 
----------------------------------------------------------------------------------------------------------
-
-#### Terminal 3: GO-backend
-
-# 1. Logg inn til GPU-noden:
-ssh brukernavn@ificluster.its.uit.no
-ssh c6-4
-
-# 2. Naviger til server-mappen:
-cd INF-3600/DiffusionTester/ChordAI/server
-
-# 3. Start the Go-serveren(will listen to standardport 5555):
-
+```bash
+ssh <username>@ificluster.its.uit.no && ssh c6-4
+cd ~/INF-3600/ChordAI/server
 go run main.go
+```
 
+---
 
+## Optional: SVCO voice pipeline (on your laptop)
+
+SVCO needs microphone access so it runs locally. Point it at the cluster:
+
+```bash
+cd ~/INF-3600/ChordAI
+pip install -r svco/requirements.txt
+
+# The Go server is behind the SSH tunnel on localhost:5555 — forward it first:
+# (add -L 5555:c6-4:5555 to your ssh command above, or open a separate tunnel)
+ssh -L 5555:c6-4:5555 <username>@ificluster.its.uit.no
+
+CHORDAI_SERVER=http://localhost:5555 \
+CHORDAI_FRONTEND=http://localhost:3000 \
+python -m svco.main
+```
+
+---
+
+## Environment variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CHORDAI_BACKEND_URL` | `http://localhost:5555` | Go server URL (set in Nuxt at startup) |
+| `CHORDAI_SERVER` | `http://localhost:5555` | Go server URL (set in SVCO) |
+| `CHORDAI_FRONTEND` | `http://localhost:3000` | Nuxt URL (set in SVCO) |
+
+All defaults are correct for local development. On the cluster only `CHORDAI_BACKEND_URL` needs to change (to `http://c6-4:5555`).
