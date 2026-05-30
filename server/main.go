@@ -13,14 +13,14 @@ import (
 
 func main() {
 	// scriptDir is the project root — one level up from server/
-	// so that subprocess calls to models/*.py and chord-gen/nanoGPT/sample.py resolve correctly.
+	// so that subprocess calls to sample_chords.py and gemma4_lyrics.py resolve correctly.
 	exe, err := os.Executable()
 	if err != nil {
 		log.Fatalf("cannot resolve executable path: %v", err)
 	}
 	// During `go run`, the executable lives in a temp dir; fall back to cwd.
 	scriptDir := filepath.Join(filepath.Dir(exe), "..")
-	if _, err := os.Stat(filepath.Join(scriptDir, "models")); os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(scriptDir, "sample_chords.py")); os.IsNotExist(err) {
 		// Fallback: assume we're run from the server/ directory
 		cwd, _ := os.Getwd()
 		scriptDir = filepath.Join(cwd, "..")
@@ -30,12 +30,12 @@ func main() {
 
 	r := gin.Default()
 
-	// CORS — allow the Nuxt dev server, SVCO (localhost), and cluster entry node.
+	// CORS — allow the Nuxt dev server and any client origin during development.
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:    []string{"http://localhost:3000", "http://localhost:5173", "http://localhost:8000", "http://localhost:5555"},
-		AllowMethods:    []string{"GET", "POST", "OPTIONS"},
-		AllowHeaders:    []string{"Origin", "Content-Type", "Accept"},
-		AllowWebSockets: true,
+		AllowOrigins:     []string{"http://localhost:3000", "http://localhost:5173", "http://localhost:8000"},
+		AllowMethods:     []string{"GET", "POST", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept"},
+		AllowWebSockets:  true,
 	}))
 
 	// GET /api/ping — connectivity test
@@ -53,7 +53,7 @@ func main() {
 
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "5556"
+		port = "5555"
 	}
 
 	log.Printf("[main] ChordAI server listening on :%s", port)

@@ -1,64 +1,45 @@
 # ChordAI
 
-Describe a song in plain language — or play some chords into a microphone — and ChordAI generates chord progressions, lyrics, and an album cover.
+AI song generator. Describe a song in plain language; the system generates chord progressions, lyrics, and an album cover.
+
+## Components
+
+| Component | Stack | Purpose |
+|-----------|-------|---------|
+| [`chord-gen/`](chord-gen/) | Python, PyTorch | Custom chord-progression model — train and sample |
+| [`server/`](server/) | Go, Gin | REST + WebSocket API; orchestrates the AI pipeline |
+| [`client/`](client/) | Nuxt 3, Vue 3 | Chat-style web UI |
+| [`models/`](models/) | Python, Ollama, Diffusers | Lyrics (Gemma 4) and album art generation |
 
 ## How it works
 
 ```
-Text input  ──►┐
-               ├─► Go server ──► llama3.2 (planner)
-Voice input ──►┘                     │
-                              ┌──────┴──────────────┐
-                              ▼                     ▼
-                        nanoGPT chords        Gemma 4 lyrics
-                              │                     │
-                              └──────────┬──────────┘
-                                         ▼
-                                  Dreamshaper XL
-                                  (album cover)
-                                         │
-                                         ▼
-                                  Nuxt chat UI
+User prompt
+  └─► Go server
+        ├─► llama3.2  (Ollama)   — interprets freetext → genre, decade, BPM, vibe
+        ├─► sample.py (PyTorch)  — generates chord progressions
+        ├─► Gemma 4   (Ollama)   — writes section-aware lyrics
+        └─► Dreamshaper XL       — generates 1024×1024 album cover image
 ```
-
-- **Planner** (llama3.2 via Ollama) — interprets freetext into genre, decade, BPM, vibe, and decides which models to run
-- **Chord model** (nanoGPT, trained on Chordonomicon) — generates section-aware chord progressions
-- **Lyrics model** (Gemma 4 via Ollama) — writes section-aware lyrics matching the chords
-- **Image model** (Dreamshaper XL via Diffusers) — generates a matching album cover
-- **SVCO** — optional voice pipeline: mic → VAD → Whisper STT + chord detection → Go server
 
 ---
 
-## Quick start
+## Setup
 
-### Option A — Docker Compose (recommended)
-
-Requires Docker with the NVIDIA Container Toolkit installed.
-
-```bash
-cp .env.example .env          # edit if you want non-default ports
-docker compose up
-```
-
-Open http://localhost:3000.
-
-The first run pulls Ollama models automatically (~4 GB). GPU passthrough is configured in `docker-compose.yml`.
-
----
-
-### Option B — Manual (local dev)
-
-#### Prerequisites
+### Prerequisites
 
 - Go 1.21+
-- Node 18+ and npm
+- Node 18+ with npm
 - Python 3.10+
-- [Ollama](https://ollama.com) on `$PATH`
-- CUDA GPU recommended (required for image generation)
+- [Ollama](https://ollama.com) installed and on `$PATH`
+- A CUDA GPU (recommended — required for image generation; strongly recommended for chord model training)
 
-#### 1. Chord model checkpoint
+---
 
-The checkpoint is not in the repo and must be trained once:
+### 1. Chord model — train on first pull
+
+The chord model checkpoint is not committed to the repo and must be trained locally.
+See **[chord-gen/README.md](chord-gen/README.md)** for the full data + training pipeline.
 
 ```bash
 cd chord-gen
@@ -68,107 +49,59 @@ make train    # ~30 min on a single GPU
 cd ..
 ```
 
-Without a checkpoint the server uses a hardcoded fallback (genre-appropriate progressions, no neural generation), so the rest of the stack is fully testable before training.
+If no checkpoint is present the server falls back to a hardcoded stub (genre-appropriate progressions without neural generation), so the rest of the stack can be tested before training completes.
 
-#### 2. Ollama models
+---
 
-```bash
-ollama pull llama3.2
-ollama pull gemma4
-ollama serve          # keep running
-```
-
-#### 3. Python dependencies
+### 2. Ollama models
 
 ```bash
-pip install -r models/requirements.txt
+ollama pull llama3.2   # planner — routes user input to structured parameters
+ollama pull gemma4     # lyrics generator
 ```
 
-#### 4. Go server
+Start Ollama before running the server:
+
+```bash
+ollama serve           # keep this running in a dedicated terminal
+```
+
+---
+
+### 3. Python model dependencies
+
+The image generator and lyrics generator live in `models/` and need their own dependencies:
+
+```bash
+pip install torch diffusers transformers accelerate ollama rich
+```
+
+For GPU image generation install the CUDA torch wheel — see <https://pytorch.org/get-started/locally/>.
+
+---
+
+### 4. Go server
 
 ```bash
 cd server
-go run main.go        # listens on :5555
+go run main.go         # listens on :5555
 ```
 
-#### 5. Frontend
+---
+
+### 5. Frontend
 
 ```bash
 cd client
 npm install
-npm run dev           # listens on :3000
+npm run dev            # listens on :3000
 ```
 
-Open http://localhost:3000.
+Open <http://localhost:3000> in your browser.
 
 ---
 
-## Using the app
+## Cluster setup (UiT IFI)
 
-### Text input
-
-Type a description in the chat box and press Enter (or click Send):
-
-> *"melancholic indie rock like early Radiohead"*
-> *"upbeat 80s pop song about summer, 120 BPM"*
-> *"jazz ballad in the style of Bill Evans"*
-
-The pipeline status bar shows which stage is running. The result appears as a chat message with chord progressions, lyrics, and (if the planner decided to) an album cover image.
-
-### Voice input (SVCO)
-
-SVCO runs separately on the same machine as the Go server. It listens on the default microphone, detects speech and chords, and sends results to the frontend automatically.
-
-```bash
-cd svco
-pip install -r requirements.txt
-python -m svco.main
-```
-
-Speak your song idea into the microphone and optionally strum some chords. When you stop speaking, SVCO sends the transcription and detected chords to the Go server. The frontend shows a loading state immediately and fills in the result when the pipeline finishes.
-
-Set `CHORDAI_SERVER` and `CHORDAI_FRONTEND` environment variables if the Go server or Nuxt are not on localhost:
-
-```bash
-CHORDAI_SERVER=http://c6-4:5555 CHORDAI_FRONTEND=http://localhost:3000 python -m svco.main
-```
-
----
-
-## Cluster setup (UiT IFI GPU nodes)
-
-See [HowToRunFrontendOnCluster.md](HowToRunFrontendOnCluster.md) for the full SSH tunnel and per-terminal startup instructions.
-
----
-
-## Project layout
-
-```
-chord-gen/          nanoGPT chord model — training data, model code, checkpoint
-  nanoGPT/
-    sample.py       inference entry point
-    out-CHORDv2/    trained checkpoint (generated by make train)
-client/             Nuxt 3 frontend
-  app/
-    components/     SongOutput.vue, StatusBar.vue, ChatInput.vue, MessageList.vue
-    composables/    useChat.ts, useVoiceResult.ts
-    types/          shared TypeScript interfaces
-  server/api/       Nuxt server routes (voice-result, voice-stream)
-models/             Python model wrappers
-  lyric_generator_gemma4.py
-  image_generator.py
-  schemas.py        Pydantic data contracts (mirrors Go structs)
-server/             Go backend
-  main.go
-  routers/          HTTP + WebSocket handlers
-  executor/         Pipeline runner
-  system_connector/ Ollama planner call
-  models/           Go subprocess wrappers for each Python model
-  schemas/          Canonical Go data structs
-svco/               Voice pipeline
-  main.py           Entry point
-  sender.py         Sends sessions to the Go server
-  offline_chords.py Chord detection from audio
-docker-compose.yml
-.env.example        All configurable env vars with defaults
-```
+The project runs split across the entry node (c0-0) and a GPU node (c6-4).
+See [HowToRunFrontendOnCluster.md](HowToRunFrontendOnCluster.md) for the full SSH-tunnel and startup instructions.

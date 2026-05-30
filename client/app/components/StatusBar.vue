@@ -8,7 +8,6 @@ const STAGES = [
   { key: 'planner',     label: 'Planner' },
   { key: 'chord_model', label: 'Chords' },
   { key: 'lyrics_model', label: 'Lyrics' },
-  { key: 'image_model', label: 'Image' },
 ]
 
 const LABELS: Record<string, string> = {

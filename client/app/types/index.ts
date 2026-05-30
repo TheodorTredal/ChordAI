@@ -17,10 +17,9 @@ export interface SongResult {
   sections: Record<string, readonly string[]>
   raw_tokens: string
   lyrics: string
-  image_path?: string
 }
 
-export type PipelineStage = 'planner' | 'chord_model' | 'lyrics_model' | 'image_model' | 'result' | 'pipeline' | 'input'
+export type PipelineStage = 'planner' | 'chord_model' | 'lyrics_model' | 'result' | 'pipeline' | 'input'
 export type StageStatus = 'idle' | 'running' | 'streaming' | 'done' | 'error'
 
 export interface WSEvent {

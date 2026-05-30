@@ -2,7 +2,6 @@
 import type { PlannerInput } from '~/types'
 
 const { messages, isGenerating, currentStage, currentStageStatus, generate } = useGenerate()
-useVoiceResult(messages as Ref<any>)
 
 const config = useRuntimeConfig()
 const pingStatus = ref<'idle' | 'ok' | 'error'>('idle')
