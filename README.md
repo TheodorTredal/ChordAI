@@ -1,107 +1,49 @@
 # ChordAI
 
-AI song generator. Describe a song in plain language; the system generates chord progressions, lyrics, and an album cover.
+An AI-powered music orchestration platform. Describe a song in plain language to generate original chord progressions, lyrics, and album art, or use the built-in audio analysis engine to transcribe chords directly from audio files.
+
+## Architecture & Components
+
+ChordAI utilizes a decoupled architecture. This design allows the web-based frontend client and the Go-based orchestrator (REST API) to run on a standard computer or entry node, while the computationally heavy neural network generation can be routed to a dedicated GPU node.
+
+The project is divided into several dedicated modules. **Please refer to the `README.md` files located inside the following directories for comprehensive technical explanations of their specific functions:**
+
+* `chord-gen/`: Contains the custom Python/PyTorch chord-progression model, including data streaming and training pipelines.
+* `models/`: Houses the Python scripts for image generation (Diffusers) and lyric generation (Gemma 4).
+* `svco/`: Contains the offline audio processing and chord transcription engines.
+* `client/`: Contains the Nuxt 3 / Vue 3 frontend web application.
+* `server/`: The Go backend that orchestrates the AI pipeline 
 
 ## Components
 
-| Component | Stack | Purpose |
-|-----------|-------|---------|
-| [`chord-gen/`](chord-gen/) | Python, PyTorch | Custom chord-progression model — train and sample |
-| [`server/`](server/) | Go, Gin | REST + WebSocket API; orchestrates the AI pipeline |
-| [`client/`](client/) | Nuxt 3, Vue 3 | Chat-style web UI |
-| [`models/`](models/) | Python, Ollama, Diffusers | Lyrics (Gemma 4) and album art generation |
+| Component | Stack | Purpose | Documentation |
+|-----------|-------|---------|---------------|
+| [`client/`](client/) | Nuxt 3, Vue 3 | Chat-style web interface | [Read README](client/README.md) |
+| [`server/`](server/) | Go, Gin framework | REST + WebSocket API; orchestrates the AI pipelines | [Read README](server/README.md) |
+| [`chord-gen/`](chord-gen/) | Python, PyTorch | Custom sequence-based chord progression model (train & sample) | [Read README](chord-gen/README.md) |
+| [`models/`](models/) | Python, Ollama, Diffusers | Dedicated script environment for lyric and album art generation | [Read README](models/README.md) |
+| [`svco/`](svco/) | Python, Librosa | Offline audio processing and chord transcription engine | [Read README](svco/README.md) |
 
-## How it works
 
-```
-User prompt
-  └─► Go server
-        ├─► llama3.2  (Ollama)   — interprets freetext → genre, decade, BPM, vibe
-        ├─► sample.py (PyTorch)  — generates chord progressions
-        ├─► Gemma 4   (Ollama)   — writes section-aware lyrics
-        └─► Dreamshaper XL       — generates 1024×1024 album cover image
-```
 
----
+## Running the System on the Cluster
 
-## Setup
+Running the generative models efficiently requires routing through dedicated university GPU nodes. For the complete guide on setting up the SSH tunnels, starting the local Ollama instance, and running the Nuxt frontend across the cluster nodes (c0-0 and c6-4), please refer to the [HowToRunFrontendOnCluster.md](HowToRunFrontendOnCluster.md) document. 
+
+## Running Locally (Unsupported)
+
+Due to hardware limitations, we do not have the resources to run the full AI stack locally. The system has not been executed or tested in a purely local environment during development, and we cannot guarantee that it will function correctly without the cluster's dedicated GPU capabilities. 
+
+If you still wish to attempt a local setup, the process follows the exact same underlying logic as the cluster guide (`HowToRunFrontendOnCluster.md`), but requires the following prerequisites modifications:
 
 ### Prerequisites
-
 - Go 1.21+
-- Node 18+ with npm
+- Node 18+ (with npm)
 - Python 3.10+
-- [Ollama](https://ollama.com) installed and on `$PATH`
-- A CUDA GPU (recommended — required for image generation; strongly recommended for chord model training)
+- [Ollama](https://ollama.com) installed and added to your system `$PATH`
+- A CUDA-capable GPU (Required for image generation; strongly recommended for chord model training)
 
----
-
-### 1. Chord model — train on first pull
-
-The chord model checkpoint is not committed to the repo and must be trained locally.
-See **[chord-gen/README.md](chord-gen/README.md)** for the full data + training pipeline.
-
-```bash
-cd chord-gen
-make setup
-make data     # ~5 min — streams dataset from HuggingFace
-make train    # ~30 min on a single GPU
-cd ..
-```
-
-If no checkpoint is present the server falls back to a hardcoded stub (genre-appropriate progressions without neural generation), so the rest of the stack can be tested before training completes.
-
----
-
-### 2. Ollama models
-
-```bash
-ollama pull llama3.2   # planner — routes user input to structured parameters
-ollama pull gemma4     # lyrics generator
-```
-
-Start Ollama before running the server:
-
-```bash
-ollama serve           # keep this running in a dedicated terminal
-```
-
----
-
-### 3. Python model dependencies
-
-The image generator and lyrics generator live in `models/` and need their own dependencies:
-
-```bash
-pip install torch diffusers transformers accelerate ollama rich
-```
-
-For GPU image generation install the CUDA torch wheel — see <https://pytorch.org/get-started/locally/>.
-
----
-
-### 4. Go server
-
-```bash
-cd server
-go run main.go         # listens on :5555
-```
-
----
-
-### 5. Frontend
-
-```bash
-cd client
-npm install
-npm run dev            # listens on :3000
-```
-
-Open <http://localhost:3000> in your browser.
-
----
-
-## Cluster setup (UiT IFI)
-
-The project runs split across the entry node (c0-0) and a GPU node (c6-4).
-See [HowToRunFrontendOnCluster.md](HowToRunFrontendOnCluster.md) for the full SSH-tunnel and startup instructions.
+1. **Remove Remote Connections:** Skip all steps involving SSH tunneling and logging into `c0-0` or `c6-4`. 
+2. **Local Installations:** You must install Ollama, Python, and Go directly onto your own machine and execute their respective start commands locally. 
+3. **Frontend Adjustments:** When starting the Nuxt frontend, you can simply run the development server normally (`npm run dev`). You do not need to bind it to all network ports (`--host 0.0.0.0`) since you are not forwarding traffic from a remote server.
+4. **Routing:** Ensure that the API target routes in your Nuxt configuration point to `localhost` instead of the cluster nodes. It is highly recommended to configure this using Environment Variables rather than hardcoding the URLs directly into the configuration files.
