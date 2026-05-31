@@ -1,105 +1,42 @@
-# Sequential Voice-and-Chord Orchestrator (SVCO)
+## SVCO (Chord Transcription Engine)
 
-> Dual-channel audio ingestion pipeline for transcribing speech and acoustic guitar chords to interface with LLM agents via the Model Context Protocol (MCP).
+The Python-based SVCO module acts as the core acoustic analysis engine for the ChordAI platform. Following the deprecation of the live voice ingestion pipeline, this root directory is strictly dedicated to ingesting audio files and extracting timestamped harmonic progressions. The remnants of the scrapped live-voice interaction idea have been retained as proof of concept and archived entirely within the legacy_voice_agent_v1 folder.
 
-## Overview
+## Architecture & Codebase Layout
+The directory is structured to separate the audio preparation logic from the heavy mathematical and deep learning models, while keeping deprecated concepts isolated.
 
-SVCO is a local, Python-based orchestration application designed to capture audio from a musician alternating between spoken instructions and playing guitar chords. The system routes the audio, transcribes speech using Whisper, extracts chords using deep learning (Madmom) or CQT-based template matching, and formats the harmonic timeline and speech into a structured payload. This payload is then passed to Claude (via Anthropic API) to interact with backend generators via MCP.
-
-The architecture supports both **live microphone streaming** (optimized for WSLg) and **offline file processing** (interfacing with web frontends via FastAPI).
-
----
-
-## 🛠️ System Prerequisites
-
-Before configuring the Python environment, ensure your host operating system has the necessary binary dependencies installed. This is strictly required for transcoding and capturing audio in Linux/WSL environments.
-
-```bash
-# Update package lists
-sudo apt update
-
-# Install ffmpeg (required for transcoding compressed browser formats like .webm or .m4a)
-# Install pulseaudio-utils (required for `parec` live audio capture in WSLg)
-sudo apt install -y ffmpeg pulseaudio-utils
-
+Plaintext
 ```
 
-
-## Note on WSL Environments
-If you are running this in the Windows Subsystem for Linux (WSL), be aware that standard PyAudio/ALSA implementations will likely fail to detect the host microphone. This project uses parec via PulseAudio to bypass this limitation. Ensure your Windows privacy settings allow WSL to access your microphone.
-
-## 📦 Installation
-Due to the strict compilation requirements of the deep learning Music Information Retrieval (MIR) modules, the Python dependencies must be installed in stages. Attempting to install them all at once will cause the Cython compilation to fail.
-
-Requires Python 3.10+.
-
-```bash
-# 1. Install foundational build tools and audio libraries
-pip install numpy cython torch librosa soundfile
-
-# 2. Install the Deep Learning chord extraction framework
-# (Must be installed after Cython and NumPy)
-pip install mido
-pip install git+[https://github.com/CPJKU/madmom.git](https://github.com/CPJKU/madmom.git)
-
-# 3. Install orchestration, synthesis, and web framework tools
-pip install anthropic mcp kokoro sounddevice fastapi uvicorn python-multipart
+svco/
+├── config.py                 # Core constants including target sample rates and buffer sizes
+├── transcription_engine.py   # PCM data validation, temporary file generation, and engine routing
+├── madmom_chords.py          # Primary deep learning orchestration runner
+├── offline_chords.py         # Secondary mathematical baseline chord recognizer
+├── offline_processor.py      # Pre-recorded audio loading and resampling wrapper
+└── legacy_voice_agent_v1/    # Proof-of-concept archive containing the remnants of the scrapped live voice agent
 ```
 
-## 🏗️ Project Architecture
-The codebase is strictly separated by concern, ensuring that live microphone ingestion does not block heavy offline transcription math or web server routing.
+## Core Infrastructure Responsibilities
+### 1. Audio Data Bridging
 
-Core Processing (svco/)
-- pulse_ingest.py: Captures live audio streams using a parec subprocess. Utilizes Silero VAD and smoothed Exponential Moving Average (EMA) RMS thresholds to securely segment audio into speech and chord turns.
+The transcription_engine.py script acts as the entry point for the underlying chord recognition models. It accepts raw uncompressed PCM bytes, validates their length, and writes them to temporary WAV files. It ensures that no computing power is wasted on corrupted or insufficiently long audio captures before passing the data to the models.
 
-- offline_processor.py: Accepts pre-recorded audio files, managing resampling and transcoding into the strict 16kHz mono PCM bytes required by the transcription engine.
+### 2. Primary Deep Learning Extraction
 
-- transcription_engine.py: Coordinates the transcription of voice data and the formatting of offline chord data.
+The madmom_chords.py module houses the chord transcription. It feeds the audio into a Convolutional Neural Network to extract raw chord probabilities. It then applies a Conditional Random Field to smooth these probabilities into definitive, sequential chord segments. This method is highly resistant to acoustic noise and performance artifacts.
 
-- madmom_chords.py: Employs a Convolutional Neural Network (CNN) and Conditional Random Field (CRF) for high-accuracy offline chord transcription, immune to the acoustic flickering of standard template matching.
+### 3. Baseline Acoustic Recognition
 
-- offline_chords.py: A fast, baseline acoustic chord recognizer utilizing Constant-Q Transform (CQT) chroma templates, Viterbi decoding, and a low-frequency bass-bias.
+The offline_chords.py script provides a fast, mathematically driven alternative to the deep learning model. It utilizes a Constant-Q Transform to create chroma templates and matches the audio against a known vocabulary of major, minor, and suspended chord structures. It relies on Viterbi Decoding to enforce temporal smoothing and structure.
 
-- agent_orchestrator.py: Formats the transcribed speech and smoothed chord timeline into a structured JSON payload, passing it to Claude via MCP.
+### 4. Legacy Archive (Proof of Concept)
 
-- output_synthesis.py: Handles UI data updates and local Text-to-Speech (TTS) response generation.
+The legacy_voice_agent_v1/ directory serves as the historical proof for the original orchestration idea. It contains the scrapped logic for live microphone streaming, voice-activity detection (pulse_ingest.py), and Anthropic model formatting (agent_orchestrator.py). These components are entirely decoupled from the active transcription pipeline.
 
-- main.py: The pipeline orchestrator for live microphone streaming mode.
-
-API Layer (server/)
-- api.py: A FastAPI application that serves as the entry point for web frontend clients (e.g., Nuxt). Receives FormData audio uploads via a /verify-chords endpoint, allowing users to bypass noisy live microphones.
-
-## 🚀 Usage Guide
-1. Live Microphone Mode
-To run the continuous pipeline that listens for alternating speech and chords, run the main orchestrator. Make sure you stay silent for the configured timeout (e.g., ~2.5 seconds) to trigger the buffer flush.
+## Standard Run Command
+To bypass any web servers and test the active transcription engines directly with a pre-recorded audio file (WAV, FLAC, or MP3), navigate to this directory and utilize the baseline recognizer's command-line interface:
 
 ```Bash
-python -m svco.main
+python -m svco.offline_chords path/to/your_audio_file.wav --out chords.json
 ```
-
-2. Local File Testing Mode
-To bypass the microphone and test the chord transcription engines directly with a pre-recorded file (.wav, .mp3, .m4a):
-
-```Bash
-python test_local.py path/to/your_audio_file.wav
-```
-
-(Note: test_local.py will output both the legacy CQT template results and the Madmom CNN results so you can compare accuracy).
-
-3. Web API Server Mode
-To boot the FastAPI server to receive audio uploads from a frontend web application:
-
-```Bash
-# Run from the root directory
-uvicorn server.api:app --reload
-```
-The server will boot at http://127.0.0.1:8000. The frontend can send POST requests containing audio files to the /verify-chords endpoint.
-
-## 🎛️ Configuration & Tuning
-If the application is struggling to trigger chord recordings (or is getting stuck buffering indefinitely), adjust the hardware thresholds in svco/pulse_ingest.py:
-
-- CHORD_START_RMS_THRESHOLD: The volume level required to open the chord buffer. Lower this if quiet acoustic guitar strums are being ignored.
-
-- CHORD_KEEP_RMS_THRESHOLD: The volume level required to maintain an open buffer.
-
-- CHORD_HANGOVER_S: How long (in seconds) to keep recording after the volume dips below the threshold (prevents chord clipping between strums).
