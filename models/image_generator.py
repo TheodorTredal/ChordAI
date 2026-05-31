@@ -36,17 +36,31 @@ def main():
         pipe = pipe.to("cpu")
         print("Bruker CPU (Tregt!).")
 
+    # 1. NY NEGATIV PROMPT: Blokkerer også utvaskede farger og kjedelig komposisjon
     negative_prompt = (
-        "blurry, low quality, bad anatomy, text, typography, watermark, logo, "
-        "modern digital look, overexposed, human, face, portrait"
+        "human, person, woman, girl, lady, female, man, boy, guy, male, face, portrait, "
+        "eyes, close-up, photography of people, text, typography, title, font, watermark, "
+        "logo, bad anatomy, blurry, low quality, overexposed, washed out colors, "
+        "boring composition, cluttered background, amateur, draft, nudity,"
     )
 
-    # Generer bildet (Satt til 10 trinn siden det er en Turbo-modell)
+    # 2. NY QUALITY MODIFIER: Trigger dype, episke og inspirerende kunststiler
+    quality_modifiers = (
+        "iconic music album cover, vinyl sleeve design, breathtaking conceptual art, "
+        "epic scale, sublime atmosphere, divine lighting, hyper-detailed textures, "
+        "vibrant yet moody color palette, professional graphic design, masterpiece, "
+        "visually striking composition, trending on artstation"
+    )
+
+    enhanced_prompt = f"{args.prompt}, {quality_modifiers}"
+    
+
+    # Generer bildet
     image = pipe(
-        prompt=args.prompt,
+        prompt=enhanced_prompt,
         negative_prompt=negative_prompt,
         num_inference_steps=10,
-        guidance_scale=2.0, # Turbo-modeller trives ofte best rundt 1.5 - 3.0
+        guidance_scale=2.0,
         width=1024,
         height=1024
     ).images[0]
