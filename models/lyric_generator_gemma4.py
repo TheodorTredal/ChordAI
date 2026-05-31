@@ -272,20 +272,33 @@ def build_system_prompt() -> str:
     )
 
 
-def build_user_prompt(spec: SongSpec) -> str:
+# Canonical section order for display in the chord palette.
+_SECTION_ORDER = ["intro", "verse", "prechorus", "chorus", "bridge", "outro", "solo", "interlude"]
+
+
+def _build_palette_block(chord_ideas: dict[str, list[list[str]]]) -> str:
+    """Format multi-run chord ideas as a readable palette block."""
+    lines = []
+    displayed: set[str] = set()
+    for section in _SECTION_ORDER:
+        if section in chord_ideas:
+            ideas_str = "  |  ".join(" ".join(idea) for idea in chord_ideas[section])
+            lines.append(f"  [{section.upper()}]  {ideas_str}")
+            displayed.add(section)
+    for section, ideas in chord_ideas.items():
+        if section not in displayed:
+            ideas_str = "  |  ".join(" ".join(idea) for idea in ideas)
+            lines.append(f"  [{section.upper()}]  {ideas_str}")
+    return "\n".join(lines)
+
+
+def build_user_prompt(spec: SongSpec, chord_ideas: dict | None = None) -> str:
     style = GENRE_STYLES.get(spec.genre.lower(), {
         "description": f"{spec.genre} style",
         "vocabulary": "fitting the genre",
         "mood": "appropriate to the genre",
     })
-    chord_mood  = analyse_chords(spec.all_chords)
     era_context = decade_context(spec.decade)
-
-    # Build per-section chord annotations
-    section_breakdown = "\n".join(
-        f"  [{s.upper()}]  →  {' '.join(chords)}"
-        for s, chords in spec.sections.items()
-    ) or f"  All sections: {' '.join(spec.all_chords)}"
 
     tempo_feel = (
         "slow ballad"      if spec.tempo_bpm < 70  else
@@ -294,23 +307,83 @@ def build_user_prompt(spec: SongSpec) -> str:
         "fast and intense"
     )
 
-    return f"""Write complete, original song lyrics. Output ONLY the lyrics — no introduction, commentary, or meta-text.
-
+    # ── Chord section ─────────────────────────────────────────────────────────
+    if chord_ideas:
+        # Multi-run palette: Gemma chooses how to use the chords.
+        all_chords_flat = [c for ideas in chord_ideas.values() for idea in ideas for c in idea]
+        chord_mood = analyse_chords(all_chords_flat)
+        palette_block = _build_palette_block(chord_ideas)
+        chord_section = f"""\
 ═══════════════════════════════════════════════════
-SONG PARAMETERS
+CHORD PALETTE  (creative material — not a strict blueprint)
 ═══════════════════════════════════════════════════
-Genre       : {spec.genre.upper()}
-Era / decade: {spec.decade}s
-Tempo       : {spec.tempo_bpm} BPM ({tempo_feel})
-Emotional vibe: {spec.vibe}
+The chord model produced these progression ideas. Each row lists one or more
+candidate progressions for that section type, separated by |.
+Treat each progression as a loop — repeat it as needed within the section.
+Pick an idea, blend ideas, or create a variation; the goal is a coherent song.
 
+{palette_block}
+
+Harmonic mood suggested by these chords:
+  {chord_mood}"""
+        format_rules = f"""\
+- Design the song structure yourself. A typical structure: Intro → Verse → \
+Pre-Chorus → Chorus → Verse → Chorus → Bridge → Chorus. Intro and outro are optional.
+- Label each section: [Intro], [Verse 1], [Pre-Chorus], [Chorus], [Bridge], etc.
+- CHORD HEADER: At the very top of each section write exactly one chord line:
+    (Chords: Am F C G)
+  This is the loop that repeats throughout the section — not a per-line score.
+  Aim for 2–4 chords. Never more than 6. Never fewer than 2.
+- LYRICS: Lyric lines are plain words only. Do NOT put chord names like "(Am)"
+  before, inside, or after any lyric line. Chords live only in the header above.
+  If there are any chords outside the CHORD HEADER, so in the acutual lyrics lines
+  themself, this will trigger a bomb placed in an infant hospital. Be careful.
+- Instrumental / solo sections: one brief stage direction, e.g. "(Guitar solo)" —
+  no chord-per-beat annotations, no lyric lines.
+- Each verse: 4–6 lines. Chorus: 4–6 lines, memorable and repeatable.
+- Match the emotional vibe "{spec.vibe}" throughout — let it evolve naturally.
+- Do NOT write a title, explanation, or any text outside the labelled sections."""
+    else:
+        # Fallback: use parsed sections from the single token string.
+        chord_mood = analyse_chords(spec.all_chords)
+        section_breakdown = "\n".join(
+            f"  [{s.upper()}]  →  {' '.join(chords)}"
+            for s, chords in spec.sections.items()
+        ) or f"  All sections: {' '.join(spec.all_chords)}"
+        chord_section = f"""\
 ═══════════════════════════════════════════════════
 CHORD STRUCTURE  (one group per song section)
 ═══════════════════════════════════════════════════
 {section_breakdown}
 
 Harmonic mood suggested by these chords:
-  {chord_mood}
+  {chord_mood}"""
+        format_rules = f"""\
+- Write a section for EVERY section listed in CHORD STRUCTURE above, in order.
+- Label each section: [Intro], [Verse 1], [Chorus], [Bridge], etc.
+- CHORD HEADER: At the very top of each section write exactly one chord line:
+    (Chords: F C G C)
+  This is the loop that repeats throughout the section — not a per-line score.
+  Aim for 2–4 chords. Never more than 6. Never fewer than 2.
+- LYRICS: Lyric lines are plain words only. Do NOT put chord names like "(F)"
+  before, inside, or after any lyric line. Chords live only in the header above.
+- Instrumental / solo sections: one brief stage direction, e.g. "(Guitar solo)" —
+  no per-beat chord annotations, no lyric lines.
+- Each verse: 4–6 lines. Chorus: 4–6 lines, memorable and repeatable.
+- Match the emotional vibe "{spec.vibe}" throughout — let it evolve naturally.
+- Do NOT write a title, explanation, or any text outside the labelled sections."""
+
+    return f"""Write complete, original song lyrics. Output ONLY the lyrics — no introduction, commentary, or meta-text.
+
+═══════════════════════════════════════════════════
+SONG PARAMETERS
+═══════════════════════════════════════════════════
+Genre         : {spec.genre.upper()}
+Era / decade  : {spec.decade}s
+Tempo         : {spec.tempo_bpm} BPM ({tempo_feel})
+Emotional vibe: {spec.vibe}
+
+{chord_section}
 
 ═══════════════════════════════════════════════════
 ERA CONTEXT
@@ -328,12 +401,7 @@ Overall mood    : {style['mood']}
 ═══════════════════════════════════════════════════
 FORMAT RULES
 ═══════════════════════════════════════════════════
-- Write a section for EVERY section listed in CHORD STRUCTURE above, in order.
-- Label each section: [Intro], [Verse 1], [Chorus], [Bridge], etc.
-- Annotate chords at the top of each section in parentheses, e.g.: (Chords: F C G C)
-- Each verse: 4–6 lines. Chorus: 4–6 lines, memorable and repeatable.
-- Match the emotional vibe "{spec.vibe}" throughout — let it evolve naturally.
-- Do NOT write a title, explanation, or any text outside the labelled sections.
+{format_rules}
 
 Write the song now:"""
 
@@ -342,10 +410,11 @@ Write the song now:"""
 # Ollama generation
 # ─────────────────────────────────────────────────────────────────────────────
 
-def generate_lyrics(spec: SongSpec, model: str, temperature: float, top_p: float) -> str:
+def generate_lyrics(spec: SongSpec, model: str, temperature: float, top_p: float,
+                    chord_ideas: dict | None = None) -> str:
     messages = [
         {"role": "system", "content": build_system_prompt()},
-        {"role": "user",   "content": build_user_prompt(spec)},
+        {"role": "user",   "content": build_user_prompt(spec, chord_ideas)},
     ]
 
     console.print("\n[bold cyan]✍  Generating lyrics...[/bold cyan]\n")
@@ -448,6 +517,7 @@ Examples:
     p.add_argument("--tempo",        type=int, default=110, help="Tempo in BPM (default: 110)")
     p.add_argument("--vibe",         default="emotional",   help='Emotional vibe, e.g. "hopeful", "melancholic"')
     p.add_argument("--token_string", default="",            help="Supply chord token string directly (skips chord model)")
+    p.add_argument("--chord_ideas",  default="",            help="JSON: {section: [[chord,...], ...]} palette from multiple model runs")
 
     # ── Model flags ───────────────────────────────────────────────────────────
     p.add_argument("--model",        default="gemma4",      help="Ollama model name (default: gemma4)")
@@ -483,7 +553,23 @@ def main() -> None:
     # ── Step 2: parse into SongSpec ──────────────────────────────────────────
     spec = parse_chord_token_string(token_str, tempo_bpm=args.tempo, vibe=args.vibe)
 
+    # ── Step 3: parse chord palette (if provided by the Go server) ───────────
+    chord_ideas: dict | None = None
+    if args.chord_ideas:
+        try:
+            chord_ideas = json.loads(args.chord_ideas)
+        except json.JSONDecodeError as e:
+            console.print(f"[yellow]Warning: could not parse --chord_ideas JSON ({e}), "
+                          "falling back to token string[/yellow]")
+
     console.print(Panel(
+        f"[bold]Genre  :[/bold] {spec.genre.upper()}\n"
+        f"[bold]Decade :[/bold] {spec.decade}s\n"
+        f"[bold]Tempo  :[/bold] {spec.tempo_bpm} BPM\n"
+        f"[bold]Vibe   :[/bold] {spec.vibe}\n"
+        f"[bold]Sections:[/bold] {spec.structure_label}\n"
+        f"[bold]Chord ideas:[/bold] {len(chord_ideas)} section types"
+        if chord_ideas else
         f"[bold]Genre  :[/bold] {spec.genre.upper()}\n"
         f"[bold]Decade :[/bold] {spec.decade}s\n"
         f"[bold]Tempo  :[/bold] {spec.tempo_bpm} BPM\n"
@@ -494,7 +580,7 @@ def main() -> None:
         border_style="yellow",
     ))
 
-    # ── Step 3: verify Ollama ────────────────────────────────────────────────
+    # ── Step 4: verify Ollama ────────────────────────────────────────────────
     try:
         ollama.show(args.model)
     except ollama.ResponseError:
@@ -504,10 +590,11 @@ def main() -> None:
         console.print(f"[red]✗ Ollama unreachable: {e}[/red]  Run: ollama serve")
         sys.exit(1)
 
-    # ── Step 4: generate ────────────────────────────────────────────────────
-    lyrics = generate_lyrics(spec, model=args.model, temperature=args.temp, top_p=args.top_p)
+    # ── Step 5: generate ────────────────────────────────────────────────────
+    lyrics = generate_lyrics(spec, model=args.model, temperature=args.temp, top_p=args.top_p,
+                             chord_ideas=chord_ideas)
 
-    # ── Step 5: save ─────────────────────────────────────────────────────────
+    # ── Step 6: save ─────────────────────────────────────────────────────────
     if not args.no_save:
         saved = save_output(spec, lyrics, args.out_dir)
         console.print(f"\n[green]✓ Saved:[/green] {saved}  [dim](+ .json metadata)[/dim]")

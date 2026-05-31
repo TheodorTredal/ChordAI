@@ -67,6 +67,14 @@ Rules:
 - "pipeline" should always be ["chord_model", "lyrics_model"] unless the user explicitly asks for chords only (then ["chord_model"]) or lyrics only (then ["lyrics_model"]).
 - "tempo_bpm" must be an integer between 40 and 200.
 - "decade" must be a multiple of 10 between 1950 and 2020.
+- "seed_chords" must use the chord model's vocabulary notation. Normalise whatever the user wrote:
+    * Sharps use "s" not "#": C# → Cs, F# → Fs, G# → Gs
+    * Flats use "b": Bb, Eb, Ab (unchanged)
+    * Major chords have no quality suffix: F major → F, Fmaj → F, F:maj → F
+    * Minor chords use "min": A minor → Amin, Am → Amin, A:min → Amin
+    * Extensions attach directly: Am7 → Amin7, C#m7 → Csmin7, Fmaj7 stays Fmaj7
+    * If the user says the chords belong to a specific section (e.g. "these are my chorus chords"), prepend the section tag: <chorus> F G E7 Amin. Valid tags: <verse>, <chorus>, <bridge>, <intro>, <outro>, <solo>, <interlude>.
+    * If no section is specified, write the chords without a tag.
 - The "reasoning" field is for your internal notes — it will not be shown to the user.
 `)
 

@@ -111,10 +111,13 @@ def encode(s: str) -> list[int]:
     ids = []
     for tok in s.split():
         if tok not in stoi:
-            raise KeyError(
-                f"Prompt token {tok!r} is not in the vocabulary. "
-                f"Check spelling / slug (e.g. 'pop rock' -> '<genre:pop_rock>').")
-        ids.append(stoi[tok])
+            # Structural tokens (genre, decade) come from the server and are
+            # always well-formed. Chord tokens come from user input and may use
+            # non-standard notation — skip them with a warning rather than crash.
+            print(f"[sample] skipping unknown token {tok!r} (not in vocabulary)",
+                  flush=True)
+        else:
+            ids.append(stoi[tok])
     return ids
 
 def decode(ids: list[int]) -> str:
@@ -139,13 +142,12 @@ prompt = ' '.join(prompt_parts)
 print(f"\nMode: {mode}")
 print(f"Prompt: {prompt}\n")
 
-try:
-    start_ids = encode(prompt)
-except KeyError as e:
-    # Most common cause: a genre/decade not present in this trained vocab.
+start_ids = encode(prompt)
+if not start_ids:
+    # Every token was unknown — no usable conditioning. Abort clearly.
     avail_genres = sorted(t for t in stoi if t.startswith('<genre:'))
     avail_decades = sorted(t for t in stoi if t.startswith('<decade:'))
-    print("ERROR:", e)
+    print("ERROR: no valid tokens in prompt after encoding.")
     print("Available genres:", avail_genres)
     print("Available decades:", avail_decades)
     raise SystemExit(1)

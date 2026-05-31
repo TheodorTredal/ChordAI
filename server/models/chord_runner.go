@@ -86,9 +86,25 @@ func RunChordModel(decision *schemas.PlannerDecision, scriptDir string) (*schema
 		return runChordStub(decision)
 	}
 
+	// generateDecision is a pure "generate" run with no seed, used for runs
+	// after the first in extend mode so that non-seed sections get independent
+	// chord ideas rather than repeating the seed's pattern everywhere.
+	generateDecision := *decision
+	generateDecision.Mode = "generate"
+	generateDecision.SeedChords = ""
+	generateDecision.NextSection = ""
+
 	var specs []*schemas.SongSpec
 	for i := 0; i < numChordRuns; i++ {
-		tokenStr, err := callSamplePy(decision, nanoGPTDir)
+		// Run 0: use the original decision (respects seed/mode).
+		// Runs 1+: if the original was "extend", switch to generate so other
+		// sections receive fresh independent chord progressions.
+		d := decision
+		if i > 0 && decision.Mode == "extend" {
+			d = &generateDecision
+		}
+
+		tokenStr, err := callSamplePy(d, nanoGPTDir)
 		if err != nil {
 			log.Printf("[chord_runner] run %d/%d failed: %v", i+1, numChordRuns, err)
 			if i == 0 {
@@ -104,7 +120,27 @@ func RunChordModel(decision *schemas.PlannerDecision, scriptDir string) (*schema
 		specs = append(specs, spec)
 	}
 
-	return mergeSpecs(specs), nil
+	spec := mergeSpecs(specs)
+
+	// Fallback: if the chord model produced no section structure (common in extend
+	// mode when the output is a flat chord stream with no section tags), seed the
+	// "verse" palette directly from the user-provided seed chords. This ensures
+	// the lyrics model always gets the chords the user actually specified.
+	if len(spec.ChordIdeas) == 0 && decision.SeedChords != "" {
+		var seedTokens []string
+		for _, tok := range strings.Fields(normalizeSeedChords(decision.SeedChords)) {
+			if !strings.HasPrefix(tok, "<") {
+				seedTokens = append(seedTokens, tok)
+			}
+		}
+		if len(seedTokens) > 0 {
+			seedTokens = detectCycle(seedTokens)
+			spec.ChordIdeas = map[string][][]string{"verse": {seedTokens}}
+			spec.Sections = map[string][]string{"verse": seedTokens}
+		}
+	}
+
+	return spec, nil
 }
 
 // detectCycle reduces a repeated chord sequence to its base cycle.
@@ -194,6 +230,84 @@ func chordsEqual(a, b []string) bool {
 	return true
 }
 
+// reShortMinor matches the short-minor notation used outside the vocabulary,
+// e.g. "Am", "Em7", "Bbm", "Csm7" — but not "Amin", "Emaj7", etc.
+var reShortMinor = regexp.MustCompile(`^([A-G][bs]?)m(\d*)$`)
+
+// normalizeSeedChords converts common chord notation variants to the
+// vocabulary format used by the chord model:
+//
+//	sharps: # → s          (C# → Cs, F# → Fs)
+//	major:  F:maj / Fmajor / Fmaj → F   (major is the default, no suffix)
+//	minor:  A:min / Am / Aminor → Amin  (root + "min")
+//	extensions carry through: Am7 → Amin7, A:min7 → Amin7
+//	section tags (<verse> etc.) are left unchanged
+//
+// Unknown tokens that survive normalisation are skipped by sample.py with a
+// warning rather than causing a crash.
+func normalizeSeedChords(raw string) string {
+	tokens := strings.Fields(raw)
+	for i, tok := range tokens {
+		if !strings.HasPrefix(tok, "<") {
+			tokens[i] = normalizeChordTok(tok)
+		}
+	}
+	return strings.Join(tokens, " ")
+}
+
+func normalizeChordTok(tok string) string {
+	// # → s  (sharps)
+	tok = strings.ReplaceAll(tok, "#", "s")
+	// Capitalise root note
+	if len(tok) > 0 {
+		tok = strings.ToUpper(tok[:1]) + tok[1:]
+	}
+
+	// Colon-separated quality: F:maj → F, A:min → Amin, A:min7 → Amin7
+	if idx := strings.Index(tok, ":"); idx != -1 {
+		return tok[:idx] + normalizeQualitySuffix(strings.ToLower(tok[idx+1:]))
+	}
+
+	// "major" / "Major" suffix → strip  (Fmajor → F)
+	if strings.HasSuffix(strings.ToLower(tok), "major") {
+		return tok[:len(tok)-5]
+	}
+
+	// "minor" / "Minor" → "min"  (Aminor → Amin, Aminor7 → Amin7)
+	tok = strings.ReplaceAll(tok, "minor", "min")
+	tok = strings.ReplaceAll(tok, "Minor", "min")
+
+	// Short minor: Am → Amin, Bbm → Bbmin, Csm7 → Csmin7
+	if m := reShortMinor.FindStringSubmatch(tok); m != nil {
+		return m[1] + "min" + m[2]
+	}
+
+	// Bare "maj" at end (no number follows): Amaj → A
+	if strings.HasSuffix(tok, "maj") {
+		return strings.TrimSuffix(tok, "maj")
+	}
+
+	return tok
+}
+
+// normalizeQualitySuffix converts a colon-separated quality to vocab notation.
+func normalizeQualitySuffix(q string) string {
+	switch {
+	case q == "" || q == "maj" || q == "major":
+		return "" // plain major — no suffix in the vocabulary
+	case q == "min" || q == "minor" || q == "m":
+		return "min"
+	case strings.HasPrefix(q, "maj"):
+		return "maj" + q[3:] // maj7, maj9, …
+	case strings.HasPrefix(q, "min"):
+		return "min" + q[3:] // min7, min9, …
+	case len(q) > 1 && q[0] == 'm' && q[1] != 'a':
+		return "min" + q[1:] // m7, m9 → min7, min9
+	default:
+		return q
+	}
+}
+
 func callSamplePy(decision *schemas.PlannerDecision, nanoGPTDir string) (string, error) {
 	mode := decision.Mode
 	if mode == "" {
@@ -210,7 +324,14 @@ func callSamplePy(decision *schemas.PlannerDecision, nanoGPTDir string) (string,
 		fmt.Sprintf("--device=%s", detectDevice()),
 	}
 	if decision.SeedChords != "" {
-		args = append(args, fmt.Sprintf("--seed_chords=%s", decision.SeedChords))
+		normalized := normalizeSeedChords(decision.SeedChords)
+		// In extend mode with bare chords (no section tag), prepend <verse> so the
+		// model has structural context and is more likely to generate section
+		// transitions (chorus, bridge, etc.) after the seed.
+		if mode == "extend" && !strings.Contains(normalized, "<") {
+			normalized = "<verse> " + normalized
+		}
+		args = append(args, fmt.Sprintf("--seed_chords=%s", normalized))
 	}
 	if decision.NextSection != "" {
 		args = append(args, fmt.Sprintf("--next_section=%s", decision.NextSection))
