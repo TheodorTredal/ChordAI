@@ -1,10 +1,13 @@
-// chord_runner calls sample.py from chord-gen/nanoGPT to generate a chord
-// token string using the trained GPT checkpoint (out-CHORDv2).
+// chord_runner calls sample.py from chord-gen/nanoGPT to generate chord
+// progressions. It runs the model numChordRuns times, compacts each section's
+// chord sequence to its base repeating cycle, and merges the results into a
+// ChordIdeas palette for the lyrics model.
 // Falls back to a hardcoded stub if the script or checkpoint is missing.
 package models
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -23,14 +26,16 @@ var (
 var knownSections = map[string]bool{
 	"intro": true, "verse": true, "prechorus": true, "chorus": true,
 	"bridge": true, "outro": true, "solo": true, "interlude": true,
-	"instrumental": true, "interlude2": true,
+	"instrumental": true,
 }
 
 // chordCheckpoint is the out-dir name (relative to nanoGPT/) for the model to load.
 const chordCheckpoint = "out-CHORDv2"
 
+// numChordRuns is how many times sample.py is called to build the chord palette.
+const numChordRuns = 3
+
 // genreMap translates planner genre names to the chord model's trained vocabulary.
-// Unmapped genres fall back to "pop".
 var genreMap = map[string]string{
 	"pop":         "pop",
 	"rock":        "rock",
@@ -66,7 +71,8 @@ var genreChords = map[string][4]string{
 	"edm":     {"Am", "F", "C", "G"},
 }
 
-// RunChordModel generates a SongSpec by running sample.py in chord-gen/nanoGPT.
+// RunChordModel runs sample.py numChordRuns times, compacts each section's chord
+// sequence to its base cycle, and merges the results into a ChordIdeas palette.
 // Falls back to the stub when the script or checkpoint directory is absent.
 func RunChordModel(decision *schemas.PlannerDecision, scriptDir string) (*schemas.SongSpec, error) {
 	nanoGPTDir := filepath.Join(scriptDir, "chord-gen", "nanoGPT")
@@ -80,11 +86,112 @@ func RunChordModel(decision *schemas.PlannerDecision, scriptDir string) (*schema
 		return runChordStub(decision)
 	}
 
-	tokenStr, err := callSamplePy(decision, nanoGPTDir)
-	if err != nil {
-		return nil, err
+	var specs []*schemas.SongSpec
+	for i := 0; i < numChordRuns; i++ {
+		tokenStr, err := callSamplePy(decision, nanoGPTDir)
+		if err != nil {
+			log.Printf("[chord_runner] run %d/%d failed: %v", i+1, numChordRuns, err)
+			if i == 0 {
+				return nil, err
+			}
+			break
+		}
+		spec := parseTokenString(tokenStr, decision.TempoBPM, decision.Vibe)
+		// Compact each section's chord list to its base repeating cycle.
+		for section, chords := range spec.Sections {
+			spec.Sections[section] = detectCycle(chords)
+		}
+		specs = append(specs, spec)
 	}
-	return parseTokenString(tokenStr, decision.TempoBPM, decision.Vibe), nil
+
+	return mergeSpecs(specs), nil
+}
+
+// detectCycle reduces a repeated chord sequence to its base cycle.
+// e.g. [Am F C G Am F C G Am F C G] → [Am F C G]
+//
+// If no clean cycle is found and n > 4, it retries on the first 4 chords.
+// This catches near-cycles produced by the chord model where the base pattern
+// is slightly decorated at the end, e.g. [F G F G F C] → first 4 = [F G F G]
+// → period 2 → [F G]. Most musical progressions are 2 or 4 chords, so this
+// gives a clean, singable loop in practice.
+func detectCycle(chords []string) []string {
+	n := len(chords)
+	// Try each period length that divides evenly and produces ≥2 repetitions.
+	for period := 2; period <= n/2; period++ {
+		if n%period != 0 {
+			continue
+		}
+		base := chords[:period]
+		repeated := true
+		for i := period; i < n; i++ {
+			if chords[i] != base[i%period] {
+				repeated = false
+				break
+			}
+		}
+		if repeated {
+			return base
+		}
+	}
+	// No clean cycle found. If the sequence is long, try with the first 4 chords
+	// (one standard bar) before giving up.
+	if n > 4 {
+		return detectCycle(chords[:4])
+	}
+	return chords
+}
+
+// mergeSpecs combines multiple SongSpec runs into one with a ChordIdeas palette.
+// The first spec's metadata (genre, decade, etc.) is used as the base.
+func mergeSpecs(specs []*schemas.SongSpec) *schemas.SongSpec {
+	if len(specs) == 0 {
+		return nil
+	}
+	base := specs[0]
+
+	// Collect all unique compact progressions per section type across all runs.
+	chordIdeas := make(map[string][][]string)
+	for _, spec := range specs {
+		for section, chords := range spec.Sections {
+			if len(chords) == 0 {
+				continue
+			}
+			isDuplicate := false
+			for _, existing := range chordIdeas[section] {
+				if chordsEqual(existing, chords) {
+					isDuplicate = true
+					break
+				}
+			}
+			if !isDuplicate {
+				chordIdeas[section] = append(chordIdeas[section], chords)
+			}
+		}
+	}
+	base.ChordIdeas = chordIdeas
+
+	// Update Sections to hold only the first (representative) idea per section
+	// so the frontend chord display and fallback path stay clean.
+	for section, ideas := range chordIdeas {
+		if len(ideas) > 0 {
+			base.Sections[section] = ideas[0]
+		}
+	}
+
+	return base
+}
+
+func chordsEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func callSamplePy(decision *schemas.PlannerDecision, nanoGPTDir string) (string, error) {
@@ -154,8 +261,8 @@ func detectDevice() string {
 }
 
 // extractTokenString parses sample.py stdout to find the generated token string.
-// sample.py prints "=== sample 1 ===" then the token string on the next non-empty line,
-// with <bos> stripped and <eos> replaced by "[end]".
+// sample.py prints "=== sample 1 ===" then the token string on the next non-empty
+// line, with <bos> stripped and <eos> replaced by "[end]".
 func extractTokenString(stdout string) string {
 	inSample := false
 	for _, line := range strings.Split(stdout, "\n") {
@@ -165,9 +272,7 @@ func extractTokenString(stdout string) string {
 			continue
 		}
 		if inSample && line != "" {
-			// Strip "[end]" marker substituted for <eos> by sample.py
 			line = strings.TrimSpace(strings.ReplaceAll(line, "[end]", ""))
-			// Restore <bos> so parseTokenString gets a consistent format
 			return "<bos> " + line
 		}
 	}

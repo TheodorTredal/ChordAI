@@ -27,7 +27,16 @@ func RunLyricsModel(spec *schemas.SongSpec, scriptDir string) (string, error) {
 		"--decade", fmt.Sprintf("%d", spec.Decade),
 		"--tempo", fmt.Sprintf("%d", spec.TempoBPM),
 		"--vibe", spec.Vibe,
-		"--token_string", spec.RawTokens, // passed as separate arg — safe with spaces
+		"--token_string", spec.RawTokens,
+	}
+
+	// Pass the chord palette when available so the lyrics model can treat the
+	// chords as creative material rather than a rigid structural specification.
+	if len(spec.ChordIdeas) > 0 {
+		ideasJSON, err := json.Marshal(spec.ChordIdeas)
+		if err == nil {
+			args = append(args, fmt.Sprintf("--chord_ideas=%s", ideasJSON))
+		}
 	}
 
 	cmd := exec.Command("python3", args...)

@@ -27,12 +27,16 @@ type PlannerDecision struct {
 
 // SongSpec is the shared data contract between chord model and lyrics model.
 type SongSpec struct {
-	Genre     string              `json:"genre"`
-	Decade    int                 `json:"decade"`
-	TempoBPM  int                 `json:"tempo_bpm"`
-	Vibe      string              `json:"vibe"`
-	Sections  map[string][]string `json:"sections"`
-	RawTokens string              `json:"raw_tokens"`
+	Genre      string                 `json:"genre"`
+	Decade     int                    `json:"decade"`
+	TempoBPM   int                    `json:"tempo_bpm"`
+	Vibe       string                 `json:"vibe"`
+	Sections   map[string][]string    `json:"sections"`
+	RawTokens  string                 `json:"raw_tokens"`
+	// ChordIdeas carries compact chord progressions per section from multiple
+	// model runs. Each section maps to a list of candidate progressions so the
+	// lyrics model can treat them as creative material rather than a strict spec.
+	ChordIdeas map[string][][]string  `json:"chord_ideas,omitempty"`
 }
 
 // SongResult is the final output returned to the client.
