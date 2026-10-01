@@ -1,3 +1,5 @@
+To get a better insight into the project please see the report [here](report.pdf)
+
 # ChordAI
 
 An AI-powered music orchestration platform. Describe a song in plain language to generate original chord progressions, lyrics, and album art, or use the built-in audio analysis engine to transcribe chords directly from audio files.
