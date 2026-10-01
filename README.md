@@ -1,4 +1,4 @@
-To get a better insight into the project please see the report [here](report.pdf)
+To get a better insight into the project please see the report [here](ChordAI.pdf)
 
 # ChordAI
 
